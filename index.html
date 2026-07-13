@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简约个人小站</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        html {
+            scroll-behavior: smooth;
+        }
+        /* 导航栏 */
+        nav {
+            width: 100%;
+            height: 60px;
+            background: #fff;
+            box-shadow: 0 2px 8px #eee;
+            position: fixed;
+            top: 0;
+            z-index: 999;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 5%;
+            transition: 0.3s;
+        }
+        nav.active {
+            background: #2563eb;
+        }
+        nav.active .logo, nav.active a {
+            color: #fff;
+        }
+        .logo {
+            font-size: 22px;
+            font-weight: bold;
+            color: #2563eb;
+        }
+        .nav-links a {
+            text-decoration: none;
+            color: #333;
+            margin-left: 25px;
+            font-size: 15px;
+            transition: 0.2s;
+        }
+        .nav-links a:hover {
+            color: #2563eb;
+        }
+        /* Banner首屏 */
+        .banner {
+            margin-top: 60px;
+            width: 100%;
+            height: 90vh;
+            background: linear-gradient(135deg, #60a5fa, #2563eb);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+        }
+        .banner h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .banner p {
+            font-size: 18px;
+            margin-bottom: 35px;
+            max-width: 600px;
+            line-height: 1.8;
+        }
+        .btn {
+            padding: 12px 32px;
+            background: #fff;
+            color: #2563eb;
+            text-decoration: none;
+            border-radius: 30px;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .btn:hover {
+            background: transparent;
+            border: 2px solid #fff;
+            color: #fff;
+        }
+        /* 通用区块样式 */
+        section {
+            padding: 80px 5%;
+        }
+        .section-title {
+            text-align: center;
+            font-size: 32px;
+            color: #1e293b;
+            margin-bottom: 60px;
+            position: relative;
+        }
+        .section-title::after {
+            content: "";
+            width: 60px;
+            height: 4px;
+            background: #2563eb;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: -12px;
+        }
+        /* 关于我们 */
+        .about-box {
+            display: flex;
+            gap: 50px;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .about-text {
+            flex: 1;
+        }
+        .about-text h3 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #222;
+        }
+        .about-text p {
+            line-height: 1.9;
+            color: #555;
+            margin-bottom: 15px;
+        }
+        .about-img {
+            flex: 1;
+            height: 320px;
+            background: #e2e8f0;
+            border-radius: 12px;
+        }
+        /* 服务卡片 */
+        .service-wrap {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .service-card {
+            padding: 40px 25px;
+            background: #f8fafc;
+            border-radius: 12px;
+            text-align: center;
+            transition: 0.3s;
+        }
+        .service-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 10px 25px #e2e8f0;
+        }
+        .service-card h4 {
+            font-size: 20px;
+            margin: 15px 0;
+            color: #1e293b;
+        }
+        .service-card p {
+            color: #64748b;
+            line-height: 1.7;
+        }
+        /* 作品展示 */
+        .work-wrap {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .work-item {
+            height: 220px;
+            background: #cbd5e1;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        /* 留言区域 */
+        .msg-box {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        input, textarea {
+            width: 100%;
+            display: block;
+            margin-bottom: 18px;
+            padding: 14px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 15px;
+        }
+        textarea {
+            height: 140px;
+            resize: none;
+        }
+        .submit-btn {
+            border: none;
+            background: #2563eb;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .submit-btn:hover {
+            background: #1d4ed8;
+        }
+        /* 页脚 */
+        footer {
+            background: #1e293b;
+            color: #cbd5e1;
+            text-align: center;
+            padding: 30px 0;
+        }
+        /* 移动端适配 */
+        @media (max-width:768px) {
+            .nav-links {
+                display: none;
+            }
+            .banner h1 {
+                font-size: 32px;
+            }
+            .about-box {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav id="navbar">
+        <div class="logo">MySite</div>
+        <div class="nav-links">
+            <a href="#home">首页</a>
+            <a href="#about">关于</a>
+            <a href="#service">服务</a>
+            <a href="#works">作品</a>
+            <a href="#message">留言</a>
+        </div>
+    </nav>
+
+    <!-- Banner -->
+    <div class="banner" id="home">
+        <h1>欢迎来到我的小型网站</h1>
+        <p>这是一套完整静态前端网站模板，支持电脑手机访问，包含导航、轮播、卡片、留言表单等常用模块，可自由修改文字、颜色、图片快速商用/个人使用。</p>
+        <a href="#about" class="btn">了解更多</a>
+    </div>
+
+    <!-- 关于我们 -->
+    <section id="about">
+        <h2 class="section-title">关于本站</h2>
+        <div class="about-box">
+            <div class="about-text">
+                <h3>简约轻量化静态网站</h3>
+                <p>全站仅使用HTML、CSS、原生JavaScript开发，无任何框架依赖，加载速度快，部署简单。</p>
+                <p>适合个人简历、工作室展示、小型企业官网、作品集站点，所有样式可自定义修改配色、布局、文字内容。</p>
+                <p>完美适配移动端，自动缩放布局，无需额外适配插件，开箱即用。</p>
+            </div>
+            <div class="about-img"></div>
+        </div>
+    </section>
+
+    <!-- 服务板块 -->
+    <section id="service" style="background:#f8fafc;">
+        <h2 class="section-title">提供服务</h2>
+        <div class="service-wrap">
+            <div class="service-card">
+                <h4>网页制作</h4>
+                <p>静态官网、个人博客、作品集单页网站定制开发</p>
+            </div>
+            <div class="service-card">
+                <h4>页面优化</h4>
+                <p>响应式适配、加载提速、UI美化、动画交互升级</p>
+            </div>
+            <div class="service-card">
+                <h4>模板修改</h4>
+                <p>基于现有模板替换内容、更换配色、调整页面结构</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 作品展示 -->
+    <section id="works">
+        <h2 class="section-title">作品案例</h2>
+        <div class="work-wrap">
+            <div class="work-item"></div>
+            <div class="work-item"></div>
+            <div class="work-item"></div>
+            <div class="work-item"></div>
+        </div>
+    </section>
+
+    <!-- 留言表单 -->
+    <section id="message" style="background:#f8fafc;">
+        <h2 class="section-title">在线留言</h2>
+        <form class="msg-box" id="msgForm">
+            <input type="text" placeholder="请输入您的姓名" required>
+            <input type="email" placeholder="请输入邮箱" required>
+            <textarea placeholder="请输入留言内容" required></textarea>
+            <input type="submit" value="提交留言" class="submit-btn">
+        </form>
+    </section>
+
+    <!-- 底部版权 -->
+    <footer>
+        <p>© 2026 MySite 小型网站 | 静态前端模板 All Rights Reserved</p>
+    </footer>
+
+    <script>
+        // 导航栏滚动变色效果
+        const nav = document.getElementById("navbar");
+        window.addEventListener("scroll", () => {
+            if(window.scrollY > 80) {
+                nav.classList.add("active");
+            } else {
+                nav.classList.remove("active");
+            }
+        })
+
+        // 表单提交提示
+        const form = document.getElementById("msgForm");
+        form.addEventListener("submit", (e) => {
+            e.preventDefault();
+            alert("留言提交成功！（静态页面无后端，仅模拟提交）");
+            form.reset();
+        })
+    </script>
+</body>
+</html>
+
