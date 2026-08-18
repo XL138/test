@@ -87,7 +87,7 @@
 <body>
 <div class="wrap">
     <div class="info-bar">
-        <div>分数：<span id="score">0</span></div>
+        <div>分数：<span id="score">0</span>｜生命：<span id="lifeCount">10</span></div>
         <div>
             <button id="audioToggle">音效:开</button>
         </div>
@@ -106,6 +106,7 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreDom = document.getElementById('score');
+const lifeDom = document.getElementById('lifeCount');
 const audioToggleBtn = document.getElementById('audioToggle');
 const gameOverUi = document.getElementById('gameOverUi');
 const restartBtn = document.getElementById('restartBtn');
@@ -222,6 +223,7 @@ let stars = [];
 let score = 0;
 let keys = {};
 let gameRunning = true;
+let playerLife = 10; // 玩家生命，10次试错机会
 
 let lastShoot = 0;
 const shootInterval = 280;
@@ -231,9 +233,9 @@ const MIN_ENEMY_SIZE = 70;
 
 // Boss 相关
 let bossTimer = 0;
-const BOSS_INTERVAL = 3500; // Boss出现间隔也稍微放慢
+const BOSS_INTERVAL = 5000; // Boss出现间隔拉长 5秒
 const BOSS_SIZE = 90;
-const BOSS_HP = 4;
+const BOSS_HP = 8;
 
 for (let i = 0; i < 80; i++) {
     stars.push({
@@ -247,6 +249,8 @@ for (let i = 0; i < 80; i++) {
 function resetGame() {
     score = 0;
     scoreDom.innerText = score;
+    playerLife = 10;
+    lifeDom.innerText = playerLife;
     bullets = [];
     enemies = [];
     bossObstacles = [];
@@ -255,6 +259,22 @@ function resetGame() {
     player.y = canvas.height - 100;
     gameRunning = true;
     gameOverUi.style.display = "none";
+}
+
+// 玩家受到撞击，扣生命，不是直接结束游戏
+function playerHit() {
+    playerLife -= 1;
+    lifeDom.innerText = playerLife;
+    playExplodeSound();
+    // 清除屏幕上所有敌机，给喘息
+    enemies = [];
+    bossObstacles = [];
+    // 复位玩家位置
+    player.x = canvas.width / 2 - player.w / 2;
+    player.y = canvas.height - 100;
+    if(playerLife <= 0){
+        gameOver();
+    }
 }
 
 restartBtn.onclick = resetGame;
@@ -528,7 +548,7 @@ function gameLoop(timeStamp) {
     }
 
     if (gameRunning) {
-        if (Math.random() < 0.018) { // 普通敌机生成频率也略降
+        if (Math.random() < 0.010) { // 降低生成概率，障碍物生成变慢
             spawnEnemy();
         }
     }
@@ -586,7 +606,7 @@ function gameLoop(timeStamp) {
         }
 
         if (gameRunning && !e.hit && isCollide(player, e)) {
-            gameOver();
+            playerHit(); // 撞击扣生命，不是直接结束
         }
     }
 
@@ -654,7 +674,7 @@ function gameLoop(timeStamp) {
         }
 
         if (gameRunning && !boss.hit && isCollide(player, boss)) {
-            gameOver();
+            playerHit(); // Boss撞击扣生命
         }
     }
 
