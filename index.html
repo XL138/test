@@ -219,7 +219,6 @@ const player = {
 let bullets = [];
 let enemies = [];
 let bossObstacles = [];
-let stars = [];
 let score = 0;
 let keys = {};
 let gameRunning = true;
@@ -237,14 +236,43 @@ const BOSS_INTERVAL = 5000; // Boss出现间隔拉长 5秒
 const BOSS_SIZE = 90;
 const BOSS_HP = 4;
 
-for (let i = 0; i < 80; i++) {
-    stars.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        r: Math.random() * 1.5 + 0.3,
-        speed: Math.random() * 1.2 + 0.4
-    });
+// ===================== 代码雨背景新增 =====================
+const codeChars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const fontSize = 14;
+const columns = Math.floor(canvas.width / fontSize);
+const drops = [];
+// 初始化每列文字的y坐标
+for(let i = 0; i < columns; i++){
+    drops[i] = Math.random() * -canvas.height;
 }
+
+function drawCodeRain(){
+    // 半透明黑色背景，实现拖影效果
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.font = `${fontSize}px monospace`;
+    
+    for(let i = 0; i < drops.length; i++){
+        // 随机取字符
+        const char = codeChars[Math.floor(Math.random() * codeChars.length)];
+        // 主绿色高亮
+        ctx.fillStyle = '#00ff41';
+        ctx.fillText(char, i * fontSize, drops[i]);
+        
+        // 随机提亮部分字符
+        if(Math.random() > 0.92){
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(char, i * fontSize, drops[i]);
+        }
+
+        // 文字下落，超出屏幕后重置到顶部
+        if(drops[i] > canvas.height){
+            drops[i] = Math.random() * -200;
+        }
+        drops[i] += 2;
+    }
+}
+// ==========================================================
 
 function resetGame() {
     score = 0;
@@ -515,19 +543,8 @@ function gameLoop(timeStamp) {
         }
     }
 
-    ctx.fillStyle = "#030318";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    stars.forEach(s => {
-        ctx.beginPath();
-        ctx.fillStyle = `rgba(255,255,255,${0.4 + Math.random() * 0.6})`;
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fill();
-        s.y += s.speed;
-        if (s.y > canvas.height) {
-            s.y = 0;
-            s.x = Math.random() * canvas.width;
-        }
-    });
+    // 替换原来的星空背景为代码雨
+    drawCodeRain();
 
     if (gameRunning) {
         if (keys["ArrowLeft"] && player.x > 0) player.x -= player.speed;
@@ -646,7 +663,7 @@ function gameLoop(timeStamp) {
 
         // 只从图片中取，不画红色方块
         if (boss.img) {
-            ctx.drawImage(boss.img, -boss.w / 2, -boss.h / 2, boss.w, boss.h);
+            ctx.drawImage(boss.img, -boss.w / 2, -boss.w / 2, boss.w, boss.h);
         }
 
         ctx.restore();
