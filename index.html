@@ -90,6 +90,7 @@
         <div>分数：<span id="score">0</span>｜生命：<span id="lifeCount">10</span></div>
         <div>
             <button id="audioToggle">音效:开</button>
+            <button id="bgmToggle">BGM:关</button>
         </div>
     </div>
     <div class="canvas-wrap">
@@ -108,6 +109,7 @@ const ctx = canvas.getContext('2d');
 const scoreDom = document.getElementById('score');
 const lifeDom = document.getElementById('lifeCount');
 const audioToggleBtn = document.getElementById('audioToggle');
+const bgmToggleBtn = document.getElementById('bgmToggle');
 const gameOverUi = document.getElementById('gameOverUi');
 const restartBtn = document.getElementById('restartBtn');
 const finalScoreDom = document.getElementById('finalScore');
@@ -129,10 +131,26 @@ const ENEMY_IMAGE_PATHS = [
 
 let audioCtx = null;
 let audioEnable = true;
+let bgmEnable = false;
+let bgmAudio = null;
+
+// 鼓励文字数组
+const praiseTexts = ["Great!", "Nice!", "Perfect!", "Amazing!", "Cool!", "Excellent!", "Bravo!"];
+let praiseList = [];
 
 function initAudio() {
     if (audioCtx) return;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+// 加载燃向BGM（可替换为你自己的音频链接）
+function initBGM() {
+    if (bgmAudio) return;
+    bgmAudio = new Audio();
+    // 这里替换成你的燃向BGM音频地址，支持mp3/wav
+    bgmAudio.src = "https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3";
+    bgmAudio.loop = true;
+    bgmAudio.volume = 0.3;
 }
 
 function playShootSound() {
@@ -180,10 +198,54 @@ function playGameOverSound() {
     osc.stop(audioCtx.currentTime + 0.6);
 }
 
+// 添加鼓励文字
+function addPraise(x, y) {
+    const text = praiseTexts[Math.floor(Math.random() * praiseTexts.length)];
+    praiseList.push({
+        text: text,
+        x: x,
+        y: y,
+        alpha: 1,
+        offsetY: 0
+    });
+}
+
+// 绘制鼓励文字
+function drawPraise() {
+    for (let i = praiseList.length - 1; i >= 0; i--) {
+        const p = praiseList[i];
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.font = "bold 20px Arial";
+        ctx.fillStyle = "#ffdd00";
+        ctx.shadowColor = "#ff8800";
+        ctx.shadowBlur = 6;
+        ctx.fillText(p.text, p.x, p.y - p.offsetY);
+        ctx.restore();
+
+        p.offsetY += 1.2;
+        p.alpha -= 0.015;
+        if (p.alpha <= 0) {
+            praiseList.splice(i, 1);
+        }
+    }
+}
+
 audioToggleBtn.onclick = () => {
     initAudio();
     audioEnable = !audioEnable;
     audioToggleBtn.innerText = audioEnable ? "音效:开" : "音效:关";
+};
+
+bgmToggleBtn.onclick = () => {
+    initBGM();
+    bgmEnable = !bgmEnable;
+    bgmToggleBtn.innerText = bgmEnable ? "BGM:开" : "BGM:关";
+    if (bgmEnable) {
+        bgmAudio.play();
+    } else {
+        bgmAudio.pause();
+    }
 };
 
 const res = {
@@ -283,6 +345,7 @@ function resetGame() {
     enemies = [];
     bossObstacles = [];
     bossTimer = 0;
+    praiseList = [];
     player.x = canvas.width / 2 - player.w / 2;
     player.y = canvas.height - 100;
     gameRunning = true;
@@ -391,23 +454,51 @@ function isCollide(a, b) {
            a.y + a.h > b.y;
 }
 
+// 新版酷炫玩家飞机造型
 function drawDefaultPlayer(x, y, w, h) {
     ctx.save();
     const cx = x + w / 2;
+    const cy = y + h / 2;
+
+    // 机身渐变
     const grad = ctx.createLinearGradient(cx, y, cx, y + h);
-    grad.addColorStop(0, "#00ffff");
-    grad.addColorStop(1, "#0044ff");
+    grad.addColorStop(0, "#00e5ff");
+    grad.addColorStop(0.6, "#0055ff");
+    grad.addColorStop(1, "#7700ff");
     ctx.fillStyle = grad;
+    ctx.shadowColor = "#00eeff";
+    ctx.shadowBlur = 18;
+
+    // 三角主机身
     ctx.beginPath();
     ctx.moveTo(cx, y);
-    ctx.lineTo(x, y + h);
-    ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x, y + h * 0.85);
+    ctx.lineTo(cx - w * 0.35, y + h);
+    ctx.lineTo(cx + w * 0.35, y + h);
+    ctx.lineTo(x + w, y + h * 0.85);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = "#44ffff";
+
+    // 机翼装饰
+    ctx.fillStyle = "#ff44aa";
     ctx.beginPath();
-    ctx.arc(cx, y + h - 8, 10, 0, Math.PI * 2);
+    ctx.arc(cx, y + h * 0.6, 8, 0, Math.PI * 2);
     ctx.fill();
+
+    // 尾焰喷射效果
+    ctx.shadowBlur = 25;
+    ctx.shadowColor = "#ffaa00";
+    const flameGrad = ctx.createLinearGradient(cx, y + h, cx, y + h + 22);
+    flameGrad.addColorStop(0, "#ffff00");
+    flameGrad.addColorStop(1, "#ff2200");
+    ctx.fillStyle = flameGrad;
+    ctx.beginPath();
+    ctx.moveTo(cx - 12, y + h);
+    ctx.lineTo(cx, y + h + 22);
+    ctx.lineTo(cx + 12, y + h);
+    ctx.closePath();
+    ctx.fill();
+
     ctx.restore();
 }
 
@@ -545,6 +636,8 @@ function gameLoop(timeStamp) {
 
     // 替换原来的星空背景为代码雨
     drawCodeRain();
+    // 绘制得分鼓励文字
+    drawPraise();
 
     if (gameRunning) {
         if (keys["ArrowLeft"] && player.x > 0) player.x -= player.speed;
@@ -611,6 +704,7 @@ function gameLoop(timeStamp) {
                     bullets.splice(j, 1);
                     score += 10;
                     scoreDom.innerText = score;
+                    addPraise(e.x + e.w/2, e.y);
                     playExplodeSound();
                     e.hit = true;
                     break;
@@ -679,6 +773,7 @@ function gameLoop(timeStamp) {
                     if (boss.hp <= 0) {
                         score += 50;
                         scoreDom.innerText = score;
+                        addPraise(boss.x + boss.w/2, boss.y);
                         boss.hit = true;
                     }
                     break;
