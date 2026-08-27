@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>炫酷飞机大战</title>
+    <title>飞机大战</title>
     <style>
         * {
             margin: 0;
@@ -41,7 +41,6 @@
         button {
             padding: 4px 10px;
             font-size: 13px;
-            cursor: pointer;
         }
         .game-over-panel {
             position: absolute;
@@ -57,7 +56,6 @@
             transform: translate(-50%,-50%);
             width: 85%;
             max-width: 340px;
-            z-index: 10;
         }
         .game-over-panel > div:nth-child(1) {
             font-size: 32px;
@@ -77,13 +75,32 @@
             border: none;
             border-radius: 8px;
             width: 100%;
-            cursor: pointer;
         }
         #restartBtn:active {
             background: #1144aa;
         }
         .canvas-wrap {
             position: relative;
+        }
+        /* 得分鼓舞文字样式 */
+        .score-popup {
+            position: absolute;
+            left: 50%;
+            top: 40%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            color: #ffdd00;
+            text-shadow: 0 0 10px #ffaa00, 0 0 20px #ff6600;
+            pointer-events: none;
+            opacity: 0;
+            animation: popupAnim 1.2s ease-out forwards;
+            z-index: 10;
+        }
+        @keyframes popupAnim {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+            30% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
         }
     </style>
 </head>
@@ -115,24 +132,59 @@ const gameOverUi = document.getElementById('gameOverUi');
 const restartBtn = document.getElementById('restartBtn');
 const finalScoreDom = document.getElementById('finalScore');
 
-// 得分鼓动文字库
-const scoreTextList = [
-    { text: 'GREAT!', color: '#00ff88', size: 28 },
-    { text: '超棒！', color: '#ffff00', size: 26 },
-    { text: '连击击杀！', color: '#ff8800', size: 24 },
-    { text: '完美命中！', color: '#44ddff', size: 24 },
-    { text: '帅气！', color: '#ff44ff', size: 26 },
-    { text: '火力全开！', color: '#ff6666', size: 28 },
-    { text: 'NICE!', color: '#00ffff', size: 27 }
+// ===================== 障碍物图片路径 ======================
+const ENEMY_IMAGE_PATHS = [
+    "./picture/03FFD33897E4959340834CD3798C4B8A.jpg",
+    "./picture/848ED1B74304625F63CAEE971B2A0D68.jpg",
+    "./picture/9BC8CC7EA5C6A1A05730C1F56A18D74E.jpg",
+    "./picture/A0CA6DFFD486F17173729BB7759486D5.jpg",
+    "./picture/ABC3C278B03E8730B28F83762BC219C0.jpg",
+    "./picture/5242989A46F108C0EB293F8CCD133625.jpg",
+    "./picture/85714129BD4234654B89C3BE257B2171.jpg",
+    "./picture/9CB91301E9895FCD3479AF3D3439F1D5.jpg",
+    "./picture/A3E6623E0287F948DE1025FA3C2AF819.jpg",
+    "./picture/FA34A8FF120F830B641D9EA504C69FBB.jpg"
 ];
-let floatTexts = [];
+// ===========================================================
 
 let audioCtx = null;
 let audioEnable = true;
+let bgmSource = null;
+const encourageTexts = ["Great!", "Nice!", "Perfect!", "Amazing!", "Bravo!"];
 
 function initAudio() {
     if (audioCtx) return;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // 加载并播放激昂BGM
+    fetch('https://assets.mixkit.co/music/preview/mixkit-epic-orchestra-transition-1217.mp3')
+        .then(res => res.arrayBuffer())
+        .then(buf => audioCtx.decodeAudioData(buf))
+        .then(buffer => {
+            bgmSource = audioCtx.createBufferSource();
+            bgmSource.buffer = buffer;
+            bgmSource.loop = true;
+            const gain = audioCtx.createGain();
+            gain.gain.value = 0.3;
+            bgmSource.connect(gain);
+            gain.connect(audioCtx.destination);
+            if(audioEnable) bgmSource.start();
+        }).catch(err=>console.log("BGM加载失败，可替换音频地址",err));
+}
+
+// 得分鼓舞音效
+function playEncourageSound() {
+    if (!audioEnable || !audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(520, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1040, audioCtx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
 }
 
 function playShootSound() {
@@ -180,27 +232,49 @@ function playGameOverSound() {
     osc.stop(audioCtx.currentTime + 0.6);
 }
 
-// 创建得分漂浮文字
-function createScoreFloatText() {
-    const randomText = scoreTextList[Math.floor(Math.random() * scoreTextList.length)];
-    floatTexts.push({
-        text: randomText.text,
-        color: randomText.color,
-        size: randomText.size,
-        x: canvas.width / 2,
-        y: canvas.height / 2 - 50,
-        alpha: 1,
-        speed: 2
-    });
+// 弹出得分鼓舞文字
+function showEncourageText() {
+    const text = encourageTexts[Math.floor(Math.random()*encourageTexts.length)];
+    const popup = document.createElement('div');
+    popup.className = 'score-popup';
+    popup.innerText = text;
+    document.querySelector('.canvas-wrap').appendChild(popup);
+    playEncourageSound();
+    setTimeout(()=>popup.remove(),1200);
 }
 
 audioToggleBtn.onclick = () => {
     initAudio();
     audioEnable = !audioEnable;
     audioToggleBtn.innerText = audioEnable ? "音效:开" : "音效:关";
+    if(bgmSource){
+        if(audioEnable) bgmSource.start();
+        else bgmSource.stop();
+    }
 };
 
-// 敌机改用原生绘制，不再依赖外部图片
+const res = {
+    playerImg: null,
+    enemyImgList: [],
+    bulletImg: null,
+    bgImg: null
+};
+
+function preloadEnemyImages(pathArray) {
+    pathArray.forEach(path => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+            res.enemyImgList.push(img);
+        };
+        img.onerror = () => {
+            console.warn("图片加载失败，请检查路径：", path);
+        };
+        img.src = path;
+    });
+}
+preloadEnemyImages(ENEMY_IMAGE_PATHS);
+
 const player = {
     x: canvas.width / 2 - 28,
     y: canvas.height - 100,
@@ -215,135 +289,57 @@ let bossObstacles = [];
 let score = 0;
 let keys = {};
 let gameRunning = true;
-let playerLife = 10;
+let playerLife = 10; // 玩家生命，10次试错机会
 
 let lastShoot = 0;
 const shootInterval = 280;
+
+// 敌机最小尺寸
 const MIN_ENEMY_SIZE = 70;
+
+// Boss 相关
 let bossTimer = 0;
-const BOSS_INTERVAL = 5000;
+const BOSS_INTERVAL = 5000; // Boss出现间隔拉长 5秒
 const BOSS_SIZE = 90;
 const BOSS_HP = 4;
 
-// 代码雨背景
+// ===================== 代码雨背景新增 =====================
 const codeChars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const fontSize = 14;
 const columns = Math.floor(canvas.width / fontSize);
 const drops = [];
+// 初始化每列文字的y坐标
 for(let i = 0; i < columns; i++){
     drops[i] = Math.random() * -canvas.height;
 }
 
 function drawCodeRain(){
+    // 半透明黑色背景，实现拖影效果
     ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.font = `${fontSize}px monospace`;
+    
     for(let i = 0; i < drops.length; i++){
+        // 随机取字符
         const char = codeChars[Math.floor(Math.random() * codeChars.length)];
+        // 主绿色高亮
         ctx.fillStyle = '#00ff41';
         ctx.fillText(char, i * fontSize, drops[i]);
+        
+        // 随机提亮部分字符
         if(Math.random() > 0.92){
             ctx.fillStyle = '#ffffff';
             ctx.fillText(char, i * fontSize, drops[i]);
         }
+
+        // 文字下落，超出屏幕后重置到顶部
         if(drops[i] > canvas.height){
             drops[i] = Math.random() * -200;
         }
         drops[i] += 2;
     }
 }
-
-// 炫酷机甲飞机
-function drawCoolPlayer(x, y, w, h) {
-    ctx.save();
-    const cx = x + w / 2;
-    const cy = y + h / 2;
-    const bodyGrad = ctx.createLinearGradient(cx, y, cx, y + h);
-    bodyGrad.addColorStop(0, '#22ccff');
-    bodyGrad.addColorStop(0.5, '#0066ff');
-    bodyGrad.addColorStop(1, '#0022aa');
-
-    ctx.fillStyle = bodyGrad;
-    ctx.beginPath();
-    ctx.moveTo(cx, y);
-    ctx.lineTo(x + w - 8, y + h * 0.4);
-    ctx.lineTo(x + w, y + h * 0.7);
-    ctx.lineTo(x + w * 0.8, y + h);
-    ctx.lineTo(x + w * 0.2, y + h);
-    ctx.lineTo(x, y + h * 0.7);
-    ctx.lineTo(x + 8, y + h * 0.4);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = '#88eeff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.beginPath();
-    ctx.moveTo(cx, y + 10);
-    ctx.lineTo(x + w - 15, y + h * 0.45);
-    ctx.lineTo(cx, y + h * 0.5);
-    ctx.lineTo(x + 15, y + h * 0.45);
-    ctx.closePath();
-    ctx.fill();
-
-    const cockpitGrad = ctx.createRadialGradient(cx, y + h * 0.3, 0, cx, y + h * 0.3, 12);
-    cockpitGrad.addColorStop(0, '#ffffff');
-    cockpitGrad.addColorStop(0.7, '#44ddff');
-    cockpitGrad.addColorStop(1, '#0088cc');
-    ctx.fillStyle = cockpitGrad;
-    ctx.beginPath();
-    ctx.ellipse(cx, y + h * 0.3, 10, 14, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    const flameGrad = ctx.createLinearGradient(cx, y + h, cx, y + h + 20);
-    flameGrad.addColorStop(0, '#ffff00');
-    flameGrad.addColorStop(0.5, '#ff8800');
-    flameGrad.addColorStop(1, 'rgba(255,0,0,0)');
-    ctx.fillStyle = flameGrad;
-    ctx.beginPath();
-    ctx.moveTo(cx - 8, y + h);
-    ctx.lineTo(cx, y + h + 15 + Math.random() * 5);
-    ctx.lineTo(cx + 8, y + h);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.shadowColor = '#00ccff';
-    ctx.shadowBlur = 15;
-    ctx.restore();
-}
-
-function drawDefaultBullet(x, y, w, h) {
-    ctx.save();
-    const grad = ctx.createLinearGradient(x, y, x, y + h);
-    grad.addColorStop(0, "#ffffff");
-    grad.addColorStop(0.5, "#00ffff");
-    grad.addColorStop(1, "#0088ff");
-    ctx.fillStyle = grad;
-    ctx.shadowColor = "#00ffff";
-    ctx.shadowBlur = 15;
-    ctx.fillRect(x, y, w, h);
-    ctx.restore();
-}
-
-// 绘制得分文字
-function drawFloatText() {
-    floatTexts.forEach((item, index) => {
-        ctx.save();
-        ctx.globalAlpha = item.alpha;
-        ctx.font = `bold ${item.size}px sans-serif`;
-        ctx.fillStyle = item.color;
-        ctx.textAlign = 'center';
-        ctx.shadowColor = item.color;
-        ctx.shadowBlur = 10;
-        ctx.fillText(item.text, item.x, item.y);
-        ctx.restore();
-        item.y -= item.speed;
-        item.alpha -= 0.02;
-        if (item.alpha <= 0) floatTexts.splice(index, 1);
-    });
-}
+// ==========================================================
 
 function resetGame() {
     score = 0;
@@ -354,22 +350,26 @@ function resetGame() {
     enemies = [];
     bossObstacles = [];
     bossTimer = 0;
-    floatTexts = [];
     player.x = canvas.width / 2 - player.w / 2;
     player.y = canvas.height - 100;
     gameRunning = true;
     gameOverUi.style.display = "none";
 }
 
+// 玩家受到撞击，扣生命，不是直接结束游戏
 function playerHit() {
     playerLife -= 1;
     lifeDom.innerText = playerLife;
     playExplodeSound();
+    // 清除屏幕上所有敌机，给喘息
     enemies = [];
     bossObstacles = [];
+    // 复位玩家位置
     player.x = canvas.width / 2 - player.w / 2;
     player.y = canvas.height - 100;
-    if(playerLife <= 0) gameOver();
+    if(playerLife <= 0){
+        gameOver();
+    }
 }
 
 restartBtn.onclick = resetGame;
@@ -406,33 +406,39 @@ function fireBullet() {
     playShootSound();
 }
 
-// 原生绘制敌机，不用外部图片
+function getRandomEnemyImage() {
+    if (res.enemyImgList.length === 0) return null;
+    const idx = Math.floor(Math.random() * res.enemyImgList.length);
+    return res.enemyImgList[idx];
+}
+
 function spawnEnemy() {
     const size = Math.max(MIN_ENEMY_SIZE, 70 + Math.random() * 30);
     const x = Math.random() * (canvas.width - size);
-    const hue = Math.random() * 360;
+
     enemies.push({
         x: x,
         y: -size,
         w: size,
         h: size,
-        speed: 1.2 + Math.random() * 1.8,
+        speed: 1.2 + Math.random() * 1.8, // 普通敌机下降速度放慢
+        img: getRandomEnemyImage(),
         hit: false,
         rotation: 0,
         fallSpeed: 0,
-        alpha: 1,
-        hue: hue
+        alpha: 1
     });
 }
 
 function spawnBoss() {
     const x = Math.random() * (canvas.width - BOSS_SIZE);
+
     bossObstacles.push({
         x: x,
         y: -BOSS_SIZE,
         w: BOSS_SIZE,
         h: BOSS_SIZE,
-        speed: 0.7 + Math.random() * 0.6,
+        speed: 0.7 + Math.random() * 0.6, // Boss下降速度放慢
         hp: BOSS_HP,
         maxHp: BOSS_HP,
         phase: Math.floor(Math.random() * 3),
@@ -441,50 +447,161 @@ function spawnBoss() {
         rotation: 0,
         fallSpeed: 0,
         alpha: 1,
-        hue: Math.random() * 360
+        img: getRandomEnemyImage()
     });
 }
 
 function isCollide(a, b) {
-    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    return a.x < b.x + b.w &&
+           a.x + a.w > b.x &&
+           a.y < b.y + b.h &&
+           a.y + a.h > b.y;
+}
+
+// 炫酷玩家飞机造型
+function drawDefaultPlayer(x, y, w, h) {
+    ctx.save();
+    const cx = x + w/2;
+    const cy = y + h/2;
+    ctx.translate(cx, cy);
+
+    // 机身渐变
+    const grad = ctx.createLinearGradient(0, -h/2, 0, h/2);
+    grad.addColorStop(0, "#00ffff");
+    grad.addColorStop(0.5, "#0066ff");
+    grad.addColorStop(1, "#6600ff");
+    ctx.fillStyle = grad;
+    ctx.shadowColor = "#00ffff";
+    ctx.shadowBlur = 15;
+
+    // 主机身三角
+    ctx.beginPath();
+    ctx.moveTo(0, -h/2);
+    ctx.lineTo(-w/2, h/2);
+    ctx.lineTo(w/2, h/2);
+    ctx.closePath();
+    ctx.fill();
+
+    // 机翼
+    ctx.fillStyle = "#44ddff";
+    ctx.beginPath();
+    ctx.moveTo(-w/2, h/4);
+    ctx.lineTo(-w, h/2);
+    ctx.lineTo(-w/3, h/2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(w/2, h/4);
+    ctx.lineTo(w, h/2);
+    ctx.lineTo(w/3, h/2);
+    ctx.closePath();
+    ctx.fill();
+
+    // 引擎光晕
+    ctx.fillStyle = "#ffaa00";
+    ctx.shadowColor = "#ff6600";
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.arc(0, h/2 - 5, 8, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function drawDefaultBullet(x, y, w, h) {
+    ctx.save();
+    const grad = ctx.createLinearGradient(x, y, x, y + h);
+    grad.addColorStop(0, "#ffffff");
+    grad.addColorStop(0.5, "#ffff00");
+    grad.addColorStop(1, "#ff6600");
+    ctx.fillStyle = grad;
+    ctx.shadowColor = "#ffaa00";
+    ctx.shadowBlur = 12;
+    ctx.fillRect(x, y, w, h);
+    ctx.restore();
 }
 
 function drawBossBorder(boss) {
     const cx = boss.x + boss.w / 2;
     const cy = boss.y + boss.h / 2;
     const t = boss.time;
+
     ctx.save();
+
     if (boss.phase === 0) {
         ctx.strokeStyle = `hsl(${200 + Math.sin(t * 0.05) * 40}, 100%, 60%)`;
         ctx.lineWidth = 4;
         ctx.shadowColor = "#00ffff";
         ctx.shadowBlur = 15;
+
         ctx.beginPath();
         for (let i = 0; i <= 4; i++) {
             const angle = (i / 4) * Math.PI * 2 - Math.PI / 2;
             const x = cx + Math.cos(angle) * (boss.w / 2 + 8);
             const y = cy + Math.sin(angle) * (boss.h / 2 + 8);
-            i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
         }
-        ctx.closePath(); ctx.stroke();
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.beginPath();
+        for (let i = 0; i <= 36; i++) {
+            const angle = (i / 36) * Math.PI * 2;
+            const wave = Math.sin(angle * 6 + t * 0.2) * 3;
+            const r = boss.w / 2 + 12 + wave;
+            const x = cx + Math.cos(angle) * r;
+            const y = cy + Math.sin(angle) * r;
+
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
     } else if (boss.phase === 1) {
         const pulse = 1 + Math.sin(t * 0.08) * 0.15;
+
         ctx.strokeStyle = `hsl(${280 + t * 0.3}, 100%, 65%)`;
         ctx.lineWidth = 3;
         ctx.shadowColor = "#ff00ff";
         ctx.shadowBlur = 20 * pulse;
+
         ctx.beginPath();
         ctx.arc(cx, cy, boss.w / 2 + 10, 0, Math.PI * 2);
         ctx.stroke();
+
+        ctx.shadowBlur = 10 * pulse;
+        ctx.beginPath();
+        ctx.arc(cx, cy, boss.w / 2 + 6, 0, Math.PI * 2);
+        ctx.stroke();
+
     } else {
         ctx.strokeStyle = "#ffdd00";
         ctx.lineWidth = 4;
         ctx.shadowColor = "#ffaa00";
         ctx.shadowBlur = 15;
+
         ctx.beginPath();
         ctx.arc(cx, cy, boss.w / 2 + 10, 0, Math.PI * 2);
         ctx.stroke();
+
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.shadowColor = "#ffff00";
+        ctx.shadowBlur = 8;
+
+        const scanAngle = t * 0.05;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(
+            cx + Math.cos(scanAngle) * (boss.w / 2 + 16),
+            cy + Math.sin(scanAngle) * (boss.w / 2 + 16)
+        );
+        ctx.stroke();
     }
+
     ctx.restore();
 }
 
@@ -493,8 +610,10 @@ function drawBossHp(boss) {
     const barH = 6;
     const x = boss.x;
     const y = boss.y - 10;
+
     ctx.fillStyle = "#333";
     ctx.fillRect(x, y, barW, barH);
+
     const hpW = (boss.hp / boss.maxHp) * barW;
     ctx.fillStyle = boss.hp > boss.maxHp / 2 ? "#00ff88" : "#ff4444";
     ctx.fillRect(x, y, hpW, barH);
@@ -513,14 +632,16 @@ function gameLoop(timeStamp) {
             fireBullet();
             lastShoot = timeStamp;
         }
+
         bossTimer += 16;
         if (bossTimer >= BOSS_INTERVAL) {
             spawnBoss();
             bossTimer = 0;
         }
     }
+
+    // 替换原来的星空背景为代码雨
     drawCodeRain();
-    drawFloatText();
 
     if (gameRunning) {
         if (keys["ArrowLeft"] && player.x > 0) player.x -= player.speed;
@@ -529,45 +650,55 @@ function gameLoop(timeStamp) {
         if (keys["ArrowDown"] && player.y + player.h < canvas.height) player.y += player.speed;
     }
 
-    drawCoolPlayer(player.x, player.y, player.w, player.h);
+    drawDefaultPlayer(player.x, player.y, player.w, player.h);
 
     for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         if (gameRunning) b.y -= b.speed;
         drawDefaultBullet(b.x, b.y, b.w, b.h);
-        if (b.y < -30) bullets.splice(i, 1);
+        if (b.y < -30) {
+            bullets.splice(i, 1);
+        }
     }
 
-    if (gameRunning && Math.random() < 0.010) spawnEnemy();
+    if (gameRunning) {
+        if (Math.random() < 0.010) { // 降低生成概率，障碍物生成变慢
+            spawnEnemy();
+        }
+    }
 
-    // 普通敌机绘制
+    // 普通敌机逻辑
     for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
-        if (gameRunning && !e.hit) e.y += e.speed;
+
+        if (gameRunning && !e.hit) {
+            e.y += e.speed;
+        }
+
         if (e.hit) {
             e.rotation += 0.12;
             e.fallSpeed += 0.25;
             e.y += e.fallSpeed;
             e.alpha -= 0.018;
+
             if (e.alpha <= 0 || e.y > canvas.height + e.h) {
-                enemies.splice(i, 1); continue;
+                enemies.splice(i, 1);
+                continue;
             }
         }
+
         ctx.save();
         const cx = e.x + e.w / 2;
         const cy = e.y + e.h / 2;
         ctx.translate(cx, cy);
         ctx.rotate(e.rotation);
         ctx.globalAlpha = e.alpha;
-        ctx.fillStyle = `hsl(${e.hue},80%,50%)`;
-        ctx.shadowColor = `hsl(${e.hue},80%,60%)`;
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.moveTo(0,-e.w/2);
-        ctx.lineTo(-e.w/2,e.h/2);
-        ctx.lineTo(e.w/2,e.h/2);
-        ctx.closePath();
-        ctx.fill();
+
+        // 只从图片中取，不画红色方块
+        if (e.img) {
+            ctx.drawImage(e.img, -e.w / 2, -e.h / 2, e.w, e.h);
+        }
+
         ctx.restore();
 
         if (gameRunning && !e.hit) {
@@ -577,45 +708,62 @@ function gameLoop(timeStamp) {
                     bullets.splice(j, 1);
                     score += 10;
                     scoreDom.innerText = score;
+                    showEncourageText(); // 击杀敌机弹出鼓舞文字
                     playExplodeSound();
                     e.hit = true;
-                    createScoreFloatText();
                     break;
                 }
             }
         }
-        if (!e.hit && e.y > canvas.height) enemies.splice(i, 1);
-        if (gameRunning && !e.hit && isCollide(player, e)) playerHit();
+
+        if (!e.hit && e.y > canvas.height) {
+            enemies.splice(i, 1);
+        }
+
+        if (gameRunning && !e.hit && isCollide(player, e)) {
+            playerHit(); // 撞击扣生命，不是直接结束
+        }
     }
 
-    // Boss绘制
+    // Boss 障碍物逻辑
     for (let i = bossObstacles.length - 1; i >= 0; i--) {
         const boss = bossObstacles[i];
         boss.time += 1;
-        if (gameRunning && !boss.hit) boss.y += boss.speed;
+
+        if (gameRunning && !boss.hit) {
+            boss.y += boss.speed;
+        }
+
         if (boss.hit) {
             boss.rotation += 0.08;
             boss.fallSpeed += 0.18;
             boss.y += boss.fallSpeed;
             boss.alpha -= 0.012;
+
             if (boss.alpha <= 0 || boss.y > canvas.height + boss.h) {
-                bossObstacles.splice(i, 1); continue;
+                bossObstacles.splice(i, 1);
+                continue;
             }
         }
+
         drawBossBorder(boss);
-        if (!boss.hit) drawBossHp(boss);
+
+        if (!boss.hit) {
+            drawBossHp(boss);
+        }
+
         ctx.save();
         const cx = boss.x + boss.w / 2;
         const cy = boss.y + boss.h / 2;
         ctx.translate(cx, cy);
         ctx.rotate(boss.rotation);
         ctx.globalAlpha = boss.alpha;
-        ctx.fillStyle = `hsl(${boss.hue},90%,45%)`;
-        ctx.shadowColor = `hsl(${boss.hue},90%,60%)`;
-        ctx.shadowBlur = 15;
-        ctx.beginPath();
-        ctx.arc(0,0,boss.w/2,0,Math.PI*2);
-        ctx.fill();
+
+        // 只从图片中取，不画红色方块
+        if (boss.img) {
+            ctx.drawImage(boss.img, -boss.w / 2, -boss.w / 2, boss.w, boss.h);
+        }
+
         ctx.restore();
 
         if (gameRunning && !boss.hit) {
@@ -625,22 +773,34 @@ function gameLoop(timeStamp) {
                     bullets.splice(j, 1);
                     boss.hp -= 1;
                     playExplodeSound();
+
                     if (boss.hp <= 0) {
                         score += 50;
                         scoreDom.innerText = score;
+                        showEncourageText(); // 击杀Boss弹出更强鼓舞文字
                         boss.hit = true;
-                        createScoreFloatText();
-                        setTimeout(createScoreFloatText,100);
                     }
                     break;
                 }
             }
         }
-        if (!boss.hit && boss.y > canvas.height) bossObstacles.splice(i, 1);
-        if (gameRunning && !boss.hit && isCollide(player, boss)) playerHit();
+
+        if (!boss.hit && boss.y > canvas.height) {
+            bossObstacles.splice(i, 1);
+        }
+
+        if (gameRunning && !boss.hit && isCollide(player, boss)) {
+            playerHit(); // Boss撞击扣生命
+        }
     }
+
     requestAnimationFrame(gameLoop);
 }
+
+// 页面加载自动初始化音频并启动BGM
+window.addEventListener('load',()=>{
+    initAudio();
+});
 requestAnimationFrame(gameLoop);
 </script>
 </body>
