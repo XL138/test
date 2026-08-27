@@ -148,13 +148,10 @@ function initAudio() {
 function initBGM() {
     if (bgmAudio) return;
     bgmAudio = new Audio();
-    // 燃向空战BGM，可自行替换链接
     bgmAudio.src = "https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3";
     bgmAudio.loop = true;
     bgmAudio.volume = 0.35;
-    // 页面加载后自动播放
     bgmAudio.play().catch(()=>{
-        // 浏览器限制自动播放，首次点击页面再播放
         document.addEventListener('touchstart', ()=>bgmAudio.play(), {once:true});
         document.addEventListener('mousedown', ()=>bgmAudio.play(), {once:true});
     });
@@ -236,11 +233,9 @@ function drawPraise() {
         ctx.font = `bold 48px Arial`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        // 外发光描边
         ctx.strokeStyle = "#ff8800";
         ctx.lineWidth = 3;
         ctx.strokeText(p.text, canvas.width/2, canvas.height/2);
-        // 主体金色
         ctx.fillStyle = "#ffff00";
         ctx.shadowColor = "#ffaa00";
         ctx.shadowBlur = 20;
@@ -617,6 +612,7 @@ function gameLoop(timeStamp) {
 
     drawDefaultPlayer(player.x, player.y, player.w, player.h);
 
+    // 先绘制子弹
     for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         if (gameRunning) b.y -= b.speed;
@@ -632,6 +628,7 @@ function gameLoop(timeStamp) {
         }
     }
 
+    // 敌机碰撞检测修复：反向遍历，子弹命中后标记，不立即删除子弹
     for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
         if (gameRunning && !e.hit) {
@@ -659,6 +656,7 @@ function gameLoop(timeStamp) {
         ctx.restore();
 
         if (gameRunning && !e.hit) {
+            // 单独遍历子弹，命中后删除子弹
             for (let j = bullets.length - 1; j >= 0; j--) {
                 const b = bullets[j];
                 if (isCollide(b, e)) {
@@ -680,6 +678,7 @@ function gameLoop(timeStamp) {
         }
     }
 
+    // Boss碰撞检测同样修复
     for (let i = bossObstacles.length - 1; i >= 0; i--) {
         const boss = bossObstacles[i];
         boss.time += 1;
