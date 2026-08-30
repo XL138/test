@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>像素秘境：割草幸存者</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            image-rendering: pixelated;
+            font-family: 'Courier New', monospace;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            touch-action: none;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 960px;
+            aspect-ratio: 16 / 9;
+            background: #16213e;
+            border: 4px solid #0f3460;
+            box-shadow: 0 0 20px rgba(15, 52, 96, 0.5);
+            overflow: hidden;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #0f3460;
+        }
+
+        /* 横屏提示 */
+        #landscapeTip {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #1a1a2e;
+            color: #fff;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #landscapeTip.show {
+            display: flex;
+        }
+
+        #landscapeTip .icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+            animation: rotate 2s infinite;
+        }
+
+        @keyframes rotate {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(90deg); }
+        }
+
+        .ui-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(22, 33, 62, 0.95);
+            z-index: 10;
+            padding: 20px;
+        }
+
+        .ui-panel.active {
+            display: flex;
+        }
+
+        .game-title {
+            font-size: clamp(24px, 5vw, 48px);
+            color: #e94560;
+            margin-bottom: clamp(20px, 4vw, 40px);
+            text-shadow: 4px 4px 0 #0f3460;
+            letter-spacing: 4px;
+        }
+
+        .menu-btn {
+            width: clamp(180px, 30vw, 240px);
+            height: clamp(40px, 6vw, 50px);
+            margin: 8px 0;
+            background: #0f3460;
+            border: 3px solid #e94560;
+            color: #fff;
+            font-size: clamp(14px, 2vw, 18px);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .menu-btn:active {
+            background: #e94560;
+            transform: scale(0.98);
+        }
+
+        .skill-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 20;
+            padding: 20px;
+        }
+
+        .skill-panel.active {
+            display: flex;
+        }
+
+        .skill-title {
+            font-size: clamp(20px, 3vw, 32px);
+            color: #ffd700;
+            margin-bottom: clamp(15px, 3vw, 30px);
+        }
+
+        .skill-options {
+            display: flex;
+            gap: clamp(10px, 2vw, 30px);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .skill-card {
+            width: clamp(140px, 20vw, 180px);
+            height: clamp(180px, 28vw, 220px);
+            background: #16213e;
+            border: 3px solid #0f3460;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .skill-card:active {
+            border-color: #e94560;
+            transform: scale(0.96);
+        }
+
+        .skill-card.rare {
+            border-color: #ffd700;
+        }
+
+        .skill-icon {
+            width: clamp(40px, 8vw, 60px);
+            height: clamp(40px, 8vw, 60px);
+            background: #0f3460;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: clamp(20px, 4vw, 30px);
+        }
+
+        .skill-name {
+            color: #fff;
+            font-size: clamp(12px, 1.8vw, 16px);
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .skill-desc {
+            color: #aaa;
+            font-size: clamp(10px, 1.4vw, 12px);
+            line-height: 1.4;
+        }
+
+        .hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: none;
+            justify-content: space-between;
+            z-index: 5;
+            color: #fff;
+            font-size: clamp(12px, 1.5vw, 14px);
+        }
+
+        .hud.active {
+            display: flex;
+        }
+
+        .hp-bar {
+            width: clamp(120px, 25vw, 200px);
+            height: clamp(16px, 2.5vw, 20px);
+            background: #333;
+            border: 2px solid #0f3460;
+            position: relative;
+        }
+
+        .hp-fill {
+            height: 100%;
+            background: #e94560;
+            transition: width 0.3s;
+        }
+
+        .hp-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            line-height: clamp(12px, 2vw, 16px);
+            font-size: clamp(10px, 1.2vw, 12px);
+        }
+
+        .exp-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: clamp(6px, 1vw, 8px);
+            background: #333;
+            z-index: 5;
+        }
+
+        .exp-fill {
+            height: 100%;
+            background: #4ade80;
+            transition: width 0.2s;
+        }
+
+        .level-text {
+            position: absolute;
+            bottom: clamp(8px, 1.5vw, 12px);
+            right: 10px;
+            color: #4ade80;
+            font-size: clamp(12px, 1.8vw, 14px);
+            font-weight: bold;
+            z-index: 5;
+        }
+
+        .time-text {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: clamp(14px, 2vw, 18px);
+            font-weight: bold;
+            z-index: 5;
+        }
+
+        .settle-content {
+            text-align: center;
+            color: #fff;
+        }
+
+        .settle-title {
+            font-size: clamp(24px, 4vw, 36px);
+            color: #e94560;
+            margin-bottom: clamp(15px, 3vw, 30px);
+        }
+
+        .settle-item {
+            font-size: clamp(14px, 2vw, 18px);
+            margin: 8px 0;
+        }
+
+        .settle-value {
+            color: #ffd700;
+            font-weight: bold;
+        }
+
+        .upgrade-panel .upgrade-item {
+            width: clamp(280px, 60vw, 400px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            margin: 6px 0;
+            background: #0f3460;
+            border: 2px solid #16213e;
+            color: #fff;
+        }
+
+        .upgrade-info {
+            flex: 1;
+        }
+
+        .upgrade-name {
+            font-size: clamp(14px, 1.8vw, 16px);
+            margin-bottom: 4px;
+        }
+
+        .upgrade-level {
+            font-size: clamp(11px, 1.4vw, 12px);
+            color: #aaa;
+        }
+
+        .upgrade-btn {
+            padding: clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px);
+            background: #e94560;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            font-size: clamp(12px, 1.5vw, 14px);
+        }
+
+        .upgrade-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .coin-display {
+            color: #ffd700;
+            font-size: clamp(16px, 2.5vw, 20px);
+            margin-bottom: 15px;
+        }
+
+        .settings-panel .setting-item {
+            width: clamp(240px, 45vw, 300px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            margin: 6px 0;
+            color: #fff;
+        }
+
+        .setting-toggle {
+            width: clamp(40px, 6vw, 50px);
+            height: clamp(20px, 3vw, 25px);
+            background: #333;
+            border-radius: 12px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .setting-toggle.active {
+            background: #4ade80;
+        }
+
+        .setting-toggle::after {
+            content: '';
+            position: absolute;
+            width: clamp(16px, 2.5vw, 21px);
+            height: clamp(16px, 2.5vw, 21px);
+            background: #fff;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: left 0.2s;
+        }
+
+        .setting-toggle.active::after {
+            left: calc(100% - clamp(18px, 2.8vw, 23px));
+        }
+
+        .guide-text {
+            color: #fff;
+            text-align: center;
+            line-height: 2;
+            max-width: 500px;
+            font-size: clamp(12px, 1.8vw, 16px);
+        }
+
+        .back-btn {
+            margin-top: 20px;
+        }
+
+        .pause-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: clamp(28px, 4vw, 30px);
+            height: clamp(28px, 4vw, 30px);
+            background: rgba(0,0,0,0.5);
+            border: 2px solid #fff;
+            color: #fff;
+            cursor: pointer;
+            z-index: 6;
+            display: none;
+            font-size: clamp(12px, 1.5vw, 14px);
+        }
+
+        .pause-btn.active {
+            display: block;
+        }
+
+        /* 虚拟摇杆 */
+        #joystickArea {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 120px;
+            height: 120px;
+            z-index: 7;
+            display: none;
+            touch-action: none;
+        }
+
+        #joystickArea.active {
+            display: block;
+        }
+
+        #joystickBase {
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.1);
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            position: relative;
+        }
+
+        #joystickStick {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background: rgba(233, 69, 96, 0.8);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        /* 移动端全屏按钮 */
+        #fullscreenBtn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 30px;
+            height: 30px;
+            background: rgba(0,0,0,0.5);
+            border: 2px solid #fff;
+            color: #fff;
+            cursor: pointer;
+            z-index: 6;
+            display: none;
+            font-size: 14px;
+        }
+
+        #fullscreenBtn.active {
+            display: block;
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+            .menu-btn:hover {
+                background: #e94560;
+                transform: scale(1.05);
+            }
+            .skill-card:hover {
+                border-color: #e94560;
+                transform: translateY(-5px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 横屏提示 -->
+    <div id="landscapeTip">
+        <div class="icon">📱</div>
+        <h2>请横屏游玩</h2>
+        <p>旋转手机获得最佳游戏体验</p>
+    </div>
+
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- HUD -->
+        <div class="hud" id="hud">
+            <div class="hp-bar">
+                <div class="hp-fill" id="hpFill"></div>
+                <div class="hp-text" id="hpText">100/100</div>
+            </div>
+        </div>
+        <div class="time-text" id="timeText">00:00</div>
+        <button class="pause-btn" id="pauseBtn">❚❚</button>
+        <button id="fullscreenBtn">⛶</button>
+        <div class="exp-bar">
+            <div class="exp-fill" id="expFill" style="width: 0%"></div>
+        </div>
+        <div class="level-text" id="levelText">Lv.1</div>
+
+        <!-- 虚拟摇杆 -->
+        <div id="joystickArea">
+            <div id="joystickBase">
+                <div id="joystickStick"></div>
+            </div>
+        </div>
+
+        <!-- 主菜单 -->
+        <div class="ui-panel active" id="mainMenu">
+            <div class="game-title">像素秘境</div>
+            <button class="menu-btn" onclick="startGame()">开始游戏</button>
+            <button class="menu-btn" onclick="showUpgrade()">永久强化</button>
+            <button class="menu-btn" onclick="showSettings()">游戏设置</button>
+            <button class="menu-btn" onclick="showGuide()">操作说明</button>
+        </div>
+
+        <!-- 升级选择面板 -->
+        <div class="skill-panel" id="skillPanel">
+            <div class="skill-title">选择强化</div>
+            <div class="skill-options" id="skillOptions"></div>
+        </div>
+
+        <!-- 结算面板 -->
+        <div class="ui-panel" id="settlePanel">
+            <div class="settle-content">
+                <div class="settle-title">游戏结束</div>
+                <div class="settle-item">生存时间：<span class="settle-value" id="settleTime">00:00</span></div>
+                <div class="settle-item">击杀数量：<span class="settle-value" id="settleKill">0</span></div>
+                <div class="settle-item">达到等级：<span class="settle-value" id="settleLevel">1</span></div>
+                <div class="settle-item">获得秘境币：<span class="settle-value" id="settleCoin">0</span></div>
+                <button class="menu-btn" style="margin-top: 20px;" onclick="startGame()">再来一局</button>
+                <button class="menu-btn" onclick="backToMenu()">返回主界面</button>
+            </div>
+        </div>
+
+        <!-- 永久强化面板 -->
+        <div class="ui-panel upgrade-panel" id="upgradePanel">
+            <div class="coin-display">秘境币：<span id="coinDisplay">0</span></div>
+            <div id="upgradeList"></div>
+            <button class="menu-btn back-btn" onclick="backToMenu()">返回</button>
+        </div>
+
+        <!-- 设置面板 -->
+        <div class="ui-panel settings-panel" id="settingsPanel">
+            <div class="setting-item">
+                <span>背景音乐</span>
+                <div class="setting-toggle active" id="bgmToggle" onclick="toggleBgm()"></div>
+            </div>
+            <div class="setting-item">
+                <span>游戏音效</span>
+                <div class="setting-toggle active" id="sfxToggle" onclick="toggleSfx()"></div>
+            </div>
+            <div class="setting-item">
+                <span>画质等级</span>
+                <select id="qualitySelect" style="padding: 5px;">
+                    <option value="low">低</option>
+                    <option value="medium" selected>中</option>
+                    <option value="high">高</option>
+                </select>
+            </div>
+            <button class="menu-btn" style="margin-top: 15px;" onclick="resetSave()">重置存档</button>
+            <button class="menu-btn back-btn" onclick="backToMenu()">返回</button>
+        </div>
+
+        <!-- 操作说明 -->
+        <div class="ui-panel" id="guidePanel">
+            <div class="guide-text">
+                <h2 style="margin-bottom: 15px; color: #e94560;">操作说明</h2>
+                <p>电脑：WASD / 方向键 控制移动</p>
+                <p>手机：左下角虚拟摇杆控制移动</p>
+                <p>角色自动攻击附近敌人</p>
+                <p>击杀敌人获得经验宝石</p>
+                <p>升级后选择强化技能</p>
+                <p>尽可能生存更长时间！</p>
+                <p>ESC / 暂停按钮 - 暂停游戏</p>
+            </div>
+            <button class="menu-btn back-btn" onclick="backToMenu()">返回</button>
+        </div>
+
+        <!-- 暂停面板 -->
+        <div class="ui-panel" id="pausePanel">
+            <div class="game-title" style="font-size: clamp(20px, 4vw, 36px);">游戏暂停</div>
+            <button class="menu-btn" onclick="resumeGame()">继续游戏</button>
+            <button class="menu-btn" onclick="backToMenu()">返回主界面</button>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 游戏配置 ====================
+        const CONFIG = {
+            CANVAS_WIDTH: 960,
+            CANVAS_HEIGHT: 540,
+            PLAYER_SIZE: 20,
+            PLAYER_SPEED: 3,
+            PLAYER_MAX_HP: 100,
+            ATTACK_COOLDOWN: 500,
+            BULLET_SPEED: 8,
+            BULLET_SIZE: 6,
+            EXP_GEM_SIZE: 8,
+            PICKUP_RANGE: 40,
+            INVINCIBLE_TIME: 500,
+            BOSS_INTERVAL: 300000,
+            MAX_LEVEL: 30
+        };
+
+        // ==================== 游戏状态 ====================
+        let gameState = 'menu';
+        let canvas, ctx;
+        let lastTime = 0;
+        let gameTime = 0;
+        let killCount = 0;
+        let scaleRatio = 1;
+
+        // 玩家
+        let player = {
+            x: CONFIG.CANVAS_WIDTH / 2,
+            y: CONFIG.CANVAS_HEIGHT / 2,
+            hp: CONFIG.PLAYER_MAX_HP,
+            maxHp: CONFIG.PLAYER_MAX_HP,
+            speed: CONFIG.PLAYER_SPEED,
+            attackSpeed: CONFIG.ATTACK_COOLDOWN,
+            lastAttack: 0,
+            bulletCount: 1,
+            bulletDamage: 10,
+            piercing: 0,
+            splash: 0,
+            invincible: false,
+            invincibleEnd: 0,
+            level: 1,
+            exp: 0,
+            expToNext: 50,
+            magnetRange: CONFIG.PICKUP_RANGE,
+            shield: false,
+            regenRate: 0,
+            lastRegen: 0
+        };
+
+        let skillLevels = {
+            multiShot: 0,
+            attackSpeed: 0,
+            splash: 0,
+            regen: 0,
+            moveSpeed: 0,
+            shield: 0,
+            piercing: 0,
+            magnet: 0
+        };
+
+        let bullets = [];
+        let enemies = [];
+        let expGems = [];
+        let particles = [];
+
+        // 输入状态
+        let keys = {};
+        let joystick = {
+            active: false,
+            dx: 0,
+            dy: 0
+        };
+
+        // 本地存储
+        let saveData = {
+            coins: 0,
+            upgrades: {
+                maxHp: 0,
+                moveSpeed: 0,
+                attackSpeed: 0,
+                expBonus: 0,
+                coinBonus: 0
+            },
+            settings: {
+                bgm: true,
+                sfx: true,
+                quality: 'medium'
+            },
+            highScore: {
+                time: 0,
+                kills: 0
+            }
+        };
+
+        const UPGRADE_CONFIG = [
+            { id: 'maxHp', name: '初始生命', desc: '+20生命值/级', maxLevel: 10, baseCost: 50, effect: 20 },
+            { id: 'moveSpeed', name: '移速加成', desc: '+5%移速/级', maxLevel: 10, baseCost: 80, effect: 0.05 },
+            { id: 'attackSpeed', name: '攻速加成', desc: '+5%攻速/级', maxLevel: 10, baseCost: 100, effect: 0.05 },
+            { id: 'expBonus', name: '经验加成', desc: '+10%经验获取/级', maxLevel: 10, baseCost: 120, effect: 0.1 },
+            { id: 'coinBonus', name: '金币加成', desc: '+10%金币获取/级', maxLevel: 10, baseCost: 150, effect: 0.1 }
+        ];
+
+        const NORMAL_SKILLS = [
+            { id: 'multiShot', name: '多重弹道', desc: '额外发射1颗子弹', icon: '⚡', maxLevel: 5 },
+            { id: 'attackSpeed', name: '攻速强化', desc: '攻击速度+15%', icon: '🔥', maxLevel: 5 },
+            { id: 'splash', name: '范围溅射', desc: '攻击附带小范围伤害', icon: '💥', maxLevel: 5 },
+            { id: 'regen', name: '生命回复', desc: '每秒恢复2点生命', icon: '💚', maxLevel: 5 },
+            { id: 'moveSpeed', name: '移速提升', desc: '移动速度+10%', icon: '👟', maxLevel: 5 },
+            { id: 'shield', name: '护盾屏障', desc: '每10秒获得护盾', icon: '🛡️', maxLevel: 5 },
+            { id: 'piercing', name: '弹道穿透', desc: '子弹可穿透1个敌人', icon: '🏹', maxLevel: 5 },
+            { id: 'magnet', name: '磁力吸附', desc: '经验拾取范围+30', icon: '🧲', maxLevel: 5 }
+        ];
+
+        const RARE_SKILLS = [
+            { id: 'slow', name: '冰霜弹', desc: '攻击减速敌人30%', icon: '❄️', type: 'rare' },
+            { id: 'explode', name: '爆破专家', desc: '击杀敌人概率爆炸', icon: '💣', type: 'rare' },
+            { id: 'expDouble', name: '经验丰收', desc: '全局经验获取翻倍', icon: '⭐', type: 'rare' },
+            { id: 'thorns', name: '荆棘反伤', desc: '受伤时反弹伤害', icon: '🌹', type: 'rare' }
+        ];
+
+        let rareSkillsObtained = [];
+        let lastShieldTime = 0;
+        let isMobile = false;
+
+        // ==================== 初始化 ====================
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            
+            checkMobile();
+            resizeCanvas();
+            loadSave();
+            setupInput();
+            setupJoystick();
+            setupOrientation();
+            setupFullscreen();
+            updateUI();
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        function checkMobile() {
+            isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+                      || (navigator.maxTouchPoints > 1);
+            
+            if (isMobile) {
+                document.getElementById('joystickArea').classList.add('active');
+                document.getElementById('fullscreenBtn').classList.add('active');
+                // 移动端默认中等画质
+                if (saveData.settings.quality === 'high') {
+                    saveData.settings.quality = 'medium';
+                    saveGame();
+                }
+            }
+        }
+
+        function resizeCanvas() {
+            const container = document.getElementById('gameContainer');
+            const rect = container.getBoundingClientRect();
+            
+            canvas.width = CONFIG.CANVAS_WIDTH;
+            canvas.height = CONFIG.CANVAS_HEIGHT;
+            scaleRatio = rect.width / CONFIG.CANVAS_WIDTH;
+        }
+
+        function setupOrientation() {
+            const tip = document.getElementById('landscapeTip');
+            
+            function checkOrientation() {
+                if (!isMobile) return;
+                if (window.innerHeight > window.innerWidth) {
+                    tip.classList.add('show');
+                } else {
+                    tip.classList.remove('show');
+                    resizeCanvas();
+                }
+            }
+            
+            window.addEventListener('resize', () => {
+                checkOrientation();
+                if (!tip.classList.contains('show')) {
+                    resizeCanvas();
+                }
+            });
+            
+            checkOrientation();
+        }
+
+        function setupFullscreen() {
+            const btn = document.getElementById('fullscreenBtn');
+            btn.addEventListener('click', toggleFullscreen);
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                document.exitFullscreen().catch(() => {});
+            }
+        }
+
+        function loadSave() {
+            const saved = localStorage.getItem('pixelSurvivorSave');
+            if (saved) {
+                saveData = JSON.parse(saved);
+            }
+            applySettings();
+        }
+
+        function saveGame() {
+            localStorage.setItem('pixelSurvivorSave', JSON.stringify(saveData));
+        }
+
+        function applySettings() {
+            document.getElementById('bgmToggle').classList.toggle('active', saveData.settings.bgm);
+            document.getElementById('sfxToggle').classList.toggle('active', saveData.settings.sfx);
+            document.getElementById('qualitySelect').value = saveData.settings.quality;
+        }
+
+        // ==================== 输入处理 ====================
+        function setupInput() {
+            document.addEventListener('keydown', (e) => {
+                keys[e.key.toLowerCase()] = true;
+                if (e.key === 'Escape' && gameState === 'playing') {
+                    pauseGame();
+                } else if (e.key === 'Escape' && gameState === 'paused') {
+                    resumeGame();
+                }
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                keys[e.key.toLowerCase()] = false;
+            });
+
+            document.getElementById('pauseBtn').addEventListener('click', pauseGame);
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden && gameState === 'playing') {
+                    pauseGame();
+                }
+            });
+
+            window.addEventListener('resize', resizeCanvas);
+        }
+
+        // 虚拟摇杆
+        function setupJoystick() {
+            const area = document.getElementById('joystickArea');
+            const stick = document.getElementById('joystickStick');
+            const baseRect = area.getBoundingClientRect();
+            const centerX = baseRect.left + baseRect.width / 2;
+            const centerY = baseRect.top + baseRect.height / 2;
+            const maxRadius = baseRect.width / 2 - 25;
+
+            function handleStart(e) {
+                if (gameState !== 'playing') return;
+                e.preventDefault();
+                joystick.active = true;
+                handleMove(e);
+            }
+
+            function handleMove(e) {
+                if (!joystick.active || gameState !== 'playing') return;
+                e.preventDefault();
+                
+                const touch = e.touches ? e.touches[0] : e;
+                const rect = area.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                let dx = touch.clientX - centerX;
+                let dy = touch.clientY - centerY;
+                
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance > maxRadius) {
+                    dx = (dx / distance) * maxRadius;
+                    dy = (dy / distance) * maxRadius;
+                }
+                
+                stick.style.left = `calc(50% + ${dx}px)`;
+                stick.style.top = `calc(50% + ${dy}px)`;
+                
+                joystick.dx = dx / maxRadius;
+                joystick.dy = dy / maxRadius;
+            }
+
+            function handleEnd(e) {
+                e.preventDefault();
+                joystick.active = false;
+                joystick.dx = 0;
+                joystick.dy = 0;
+                stick.style.left = '50%';
+                stick.style.top = '50%';
+            }
+
+            area.addEventListener('touchstart', handleStart, { passive: false });
+            area.addEventListener('touchmove', handleMove, { passive: false });
+            area.addEventListener('touchend', handleEnd, { passive: false });
+            area.addEventListener('touchcancel', handleEnd, { passive: false });
+        }
+
+        // ==================== 游戏流程控制 ====================
+        function startGame() {
+            gameState = 'playing';
+            gameTime = 0;
+            killCount = 0;
+            bullets = [];
+            enemies = [];
+            expGems = [];
+            particles = [];
+            rareSkillsObtained = [];
+            lastShieldTime = 0;
+            
+            Object.keys(skillLevels).forEach(k => skillLevels[k] = 0);
+            
+            const hpBonus = saveData.upgrades.maxHp * UPGRADE_CONFIG[0].effect;
+            const speedBonus = 1 + saveData.upgrades.moveSpeed * UPGRADE_CONFIG[1].effect;
+            const atkSpdBonus = 1 + saveData.upgrades.attackSpeed * UPGRADE_CONFIG[2].effect;
+            
+            player = {
+                x: CONFIG.CANVAS_WIDTH / 2,
+                y: CONFIG.CANVAS_HEIGHT / 2,
+                hp: CONFIG.PLAYER_MAX_HP + hpBonus,
+                maxHp: CONFIG.PLAYER_MAX_HP + hpBonus,
+                speed: CONFIG.PLAYER_SPEED * speedBonus,
+                attackSpeed: CONFIG.ATTACK_COOLDOWN / atkSpdBonus,
+                lastAttack: 0,
+                bulletCount: 1,
+                bulletDamage: 10,
+                piercing: 0,
+                splash: 0,
+                invincible: false,
+                invincibleEnd: 0,
+                level: 1,
+                exp: 0,
+                expToNext: 50,
+                magnetRange: CONFIG.PICKUP_RANGE,
+                shield: false,
+                regenRate: 0,
+                lastRegen: 0,
+                slowEffect: false,
+                explodeChance: 0,
+                expMultiplier: 1,
+                thorns: 0
+            };
+            
+            hideAllPanels();
+            document.getElementById('hud').classList.add('active');
+            document.getElementById('pauseBtn').classList.add('active');
+            
+            if (isMobile) {
+                document.getElementById('joystickArea').classList.add('active');
+            }
+            
+            updateHUD();
+            playSound('start');
+        }
+
+        function pauseGame() {
+            if (gameState !== 'playing') return;
+            gameState = 'paused';
+            document.getElementById('pausePanel').classList.add('active');
+        }
+
+        function resumeGame() {
+            gameState = 'playing';
+            document.getElementById('pausePanel').classList.remove('active');
+        }
+
+        function gameOver() {
+            gameState = 'settle';
+            
+            const baseCoin = Math.floor(gameTime / 1000) + killCount * 2;
+            const coinBonus = 1 + saveData.upgrades.coinBonus * UPGRADE_CONFIG[4].effect;
+            const earnedCoins = Math.floor(baseCoin * coinBonus);
+            
+            saveData.coins += earnedCoins;
+            
+            if (gameTime > saveData.highScore.time) {
+                saveData.highScore.time = gameTime;
+            }
+            if (killCount > saveData.highScore.kills) {
+                saveData.highScore.kills = killCount;
+            }
+            
+            saveGame();
+            
+            document.getElementById('settleTime').textContent = formatTime(gameTime);
+            document.getElementById('settleKill').textContent = killCount;
+            document.getElementById('settleLevel').textContent = player.level;
+            document.getElementById('settleCoin').textContent = earnedCoins;
+            
+            document.getElementById('hud').classList.remove('active');
+            document.getElementById('pauseBtn').classList.remove('active');
+            document.getElementById('joystickArea').classList.remove('active');
+            document.getElementById('settlePanel').classList.add('active');
+            
+            playSound('gameover');
+        }
+
+        function backToMenu() {
+            gameState = 'menu';
+            hideAllPanels();
+            document.getElementById('mainMenu').classList.add('active');
+            document.getElementById('joystickArea').classList.remove('active');
+        }
+
+        function hideAllPanels() {
+            document.querySelectorAll('.ui-panel, .skill-panel, .hud, .pause-btn').forEach(el => {
+                el.classList.remove('active');
+            });
+        }
+
+        // ==================== 升级系统 ====================
+        function levelUp() {
+            gameState = 'levelup';
+            player.level++;
+            
+            generateSkillOptions();
+            document.getElementById('skillPanel').classList.add('active');
+            
+            playSound('levelup');
+        }
+
+        function generateSkillOptions() {
+            const container = document.getElementById('skillOptions');
+            container.innerHTML = '';
+            
+            const isRare = player.level % 5 === 0 && rareSkillsObtained.length < 2;
+            
+            let options = [];
+            
+            if (isRare) {
+                const available = RARE_SKILLS.filter(s => !rareSkillsObtained.includes(s.id));
+                options = shuffleArray(available).slice(0, 3);
+            } else {
+                const available = NORMAL_SKILLS.filter(s => skillLevels[s.id] < s.maxLevel);
+                options = shuffleArray(available).slice(0, 3);
+            }
+            
+            options.forEach(skill => {
+                const card = document.createElement('div');
+                card.className = 'skill-card' + (skill.type === 'rare' ? ' rare' : '');
+                card.innerHTML = `
+                    <div class="skill-icon">${skill.icon}</div>
+                    <div class="skill-name">${skill.name}</div>
+                    <div class="skill-desc">${skill.desc}</div>
+                    ${skill.type !== 'rare' ? `<div style="margin-top: auto; color: #aaa; font-size: 12px;">等级 ${skillLevels[skill.id]}/${skill.maxLevel}</div>` : ''}
+                `;
+                card.onclick = () => selectSkill(skill);
+                container.appendChild(card);
+            });
+        }
+
+        function selectSkill(skill) {
+            if (skill.type === 'rare') {
+                applyRareSkill(skill.id);
+                rareSkillsObtained.push(skill.id);
+            } else {
+                skillLevels[skill.id]++;
+                applyNormalSkill(skill.id);
+            }
+            
+            document.getElementById('skillPanel').classList.remove('active');
+            gameState = 'playing';
+            
+            playSound('pick');
+        }
+
+        function applyNormalSkill(skillId) {
+            switch(skillId) {
+                case 'multiShot':
+                    player.bulletCount++;
+                    break;
+                case 'attackSpeed':
+                    player.attackSpeed *= 0.85;
+                    break;
+                case 'splash':
+                    player.splash += 15;
+                    break;
+                case 'regen':
+                    player.regenRate += 2;
+                    break;
+                case 'moveSpeed':
+                    player.speed *= 1.1;
+                    break;
+                case 'shield':
+                    break;
+                case 'piercing':
+                    player.piercing++;
+                    break;
+                case 'magnet':
+                    player.magnetRange += 30;
+                    break;
+            }
+        }
+
+        function applyRareSkill(skillId) {
+            switch(skillId) {
+                case 'slow':
+                    player.slowEffect = true;
+                    break;
+                case 'explode':
+                    player.explodeChance = 0.3;
+                    break;
+                case 'expDouble':
+                    player.expMultiplier *= 2;
+                    break;
+                case 'thorns':
+                    player.thorns = 15;
+                    break;
+            }
+        }
+
+        function checkExp() {
+            if (player.exp >= player.expToNext && player.level < CONFIG.MAX_LEVEL) {
+                player.exp -= player.expToNext;
+                levelUp();
+                player.expToNext = Math.floor(player.expToNext * 1.3);
+            }
+            
+            if (player.level >= CONFIG.MAX_LEVEL) {
+                player.exp = 0;
+            }
+        }
+
+        // ==================== 玩家逻辑 ====================
+        function updatePlayer(dt) {
+            let dx = 0, dy = 0;
+            
+            // 键盘输入
+            if (keys['w'] || keys['arrowup']) dy -= 1;
+            if (keys['s'] || keys['arrowdown']) dy += 1;
+            if (keys['a'] || keys['arrowleft']) dx -= 1;
+            if (keys['d'] || keys['arrowright']) dx += 1;
+            
+            // 摇杆输入
+            if (joystick.active) {
+                dx = joystick.dx;
+                dy = joystick.dy;
+            }
+            
+            if (dx !== 0 || dy !== 0) {
+                const len = Math.sqrt(dx * dx + dy * dy);
+                dx /= len;
+                dy /= len;
+                
+                player.x += dx * player.speed;
+                player.y += dy * player.speed;
+                
+                player.x = Math.max(CONFIG.PLAYER_SIZE, Math.min(CONFIG.CANVAS_WIDTH - CONFIG.PLAYER_SIZE, player.x));
+                player.y = Math.max(CONFIG.PLAYER_SIZE, Math.min(CONFIG.CANVAS_HEIGHT - CONFIG.PLAYER_SIZE, player.y));
+            }
+            
+            if (player.invincible && Date.now() > player.invincibleEnd) {
+                player.invincible = false;
+            }
+            
+            if (Date.now() - player.lastAttack > player.attackSpeed) {
+                autoAttack();
+                player.lastAttack = Date.now();
+            }
+            
+            if (player.regenRate > 0 && Date.now() - player.lastRegen > 1000) {
+                player.hp = Math.min(player.maxHp, player.hp + player.regenRate);
+                player.lastRegen = Date.now();
+            }
+            
+            if (skillLevels.shield > 0) {
+                const shieldInterval = 10000 / skillLevels.shield;
+                if (Date.now() - lastShieldTime > shieldInterval && !player.shield) {
+                    player.shield = true;
+                    lastShieldTime = Date.now();
+                }
+            }
+        }
+
+        function autoAttack() {
+            let nearest = null;
+            let minDist = Infinity;
+            
+            enemies.forEach(enemy => {
+                const dist = distance(player.x, player.y, enemy.x, enemy.y);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearest = enemy;
+                }
+            });
+            
+            if (!nearest) return;
+            
+            const angle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
+            
+            const spread = 0.2;
+            for (let i = 0; i < player.bulletCount; i++) {
+                const offsetAngle = angle + (i - (player.bulletCount - 1) / 2) * spread;
+                bullets.push({
+                    x: player.x,
+                    y: player.y,
+                    vx: Math.cos(offsetAngle) * CONFIG.BULLET_SPEED,
+                    vy: Math.sin(offsetAngle) * CONFIG.BULLET_SPEED,
+                    damage: player.bulletDamage,
+                    piercing: player.piercing,
+                    hitEnemies: []
+                });
+            }
+        }
+
+        function damagePlayer(damage) {
+            if (player.invincible) return;
+            
+            if (player.shield) {
+                player.shield = false;
+                player.invincible = true;
+                player.invincibleEnd = Date.now() + CONFIG.INVINCIBLE_TIME;
+                playSound('shield');
+                return;
+            }
+            
+            player.hp -= damage;
+            player.invincible = true;
+            player.invincibleEnd = Date.now() + CONFIG.INVINCIBLE_TIME;
+            
+            if (player.thorns > 0) {
+                enemies.forEach(e => {
+                    if (distance(player.x, player.y, e.x, e.y) < 50) {
+                        e.hp -= player.thorns;
+                    }
+                });
+            }
+            
+            playSound('hurt');
+            
+            if (player.hp <= 0) {
+                player.hp = 0;
+                gameOver();
+            }
+        }
+
+        // ==================== 敌人系统 ====================
+        const ENEMY_TYPES = {
+            normal: { size: 16, speed: 1.2, hp: 20, exp: 10, color: '#e94560' },
+            fast: { size: 12, speed: 2.5, hp: 10, exp: 8, color: '#f39c12' },
+            tank: { size: 24, speed: 0.7, hp: 60, exp: 25, color: '#9b59b6' },
+            ranged: { size: 14, speed: 0.8, hp: 15, exp: 15, color: '#3498db', ranged: true },
+            boss: { size: 40, speed: 0.5, hp: 500, exp: 200, color: '#c0392b', isBoss: true }
+        };
+
+        let spawnTimer = 0;
+        let spawnInterval = 2000;
+        let lastBossTime = 0;
+
+        function updateEnemies(dt) {
+            spawnTimer += dt;
+            const difficulty = 1 + gameTime / 60000;
+            
+            if (spawnTimer > spawnInterval) {
+                spawnEnemy(difficulty);
+                spawnTimer = 0;
+                spawnInterval = Math.max(300, 2000 - gameTime / 100);
+            }
+            
+            if (gameTime - lastBossTime > CONFIG.BOSS_INTERVAL) {
+                spawnEnemy(difficulty, 'boss');
+                lastBossTime = gameTime;
+            }
+            
+            enemies.forEach((enemy, index) => {
+                const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                enemy.x += Math.cos(angle) * enemy.speed;
+                enemy.y += Math.sin(angle) * enemy.speed;
+                
+                if (enemy.slowed) {
+                    enemy.slowTimer -= dt;
+                    if (enemy.slowTimer <= 0) {
+                        enemy.slowed = false;
+                        enemy.speed = enemy.baseSpeed;
+                    }
+                }
+                
+                if (enemy.ranged && distance(enemy.x, enemy.y, player.x, player.y) < 200) {
+                    if (!enemy.lastShot || Date.now() - enemy.lastShot > 2000) {
+                        enemyShoot(enemy);
+                        enemy.lastShot = Date.now();
+                    }
+                }
+                
+                if (distance(player.x, player.y, enemy.x, enemy.y) < CONFIG.PLAYER_SIZE + enemy.size) {
+                    damagePlayer(10);
+                }
+                
+                if (enemy.hp <= 0) {
+                    killEnemy(enemy, index);
+                }
+            });
+        }
+
+        function spawnEnemy(difficulty, forceType = null) {
+            let type = forceType;
+            
+            if (!type) {
+                const rand = Math.random();
+                if (rand < 0.6) type = 'normal';
+                else if (rand < 0.8) type = 'fast';
+                else if (rand < 0.9) type = 'tank';
+                else type = 'ranged';
+            }
+            
+            const config = ENEMY_TYPES[type];
+            
+            let x, y;
+            const side = Math.floor(Math.random() * 4);
+            switch(side) {
+                case 0: x = Math.random() * CONFIG.CANVAS_WIDTH; y = -30; break;
+                case 1: x = CONFIG.CANVAS_WIDTH + 30; y = Math.random() * CONFIG.CANVAS_HEIGHT; break;
+                case 2: x = Math.random() * CONFIG.CANVAS_WIDTH; y = CONFIG.CANVAS_HEIGHT + 30; break;
+                case 3: x = -30; y = Math.random() * CONFIG.CANVAS_HEIGHT; break;
+            }
+            
+            enemies.push({
+                x, y,
+                type,
+                size: config.size,
+                speed: config.speed * (0.8 + difficulty * 0.2),
+                baseSpeed: config.speed * (0.8 + difficulty * 0.2),
+                hp: config.hp * difficulty,
+                maxHp: config.hp * difficulty,
+                exp: config.exp,
+                color: config.color,
+                ranged: config.ranged || false,
+                isBoss: config.isBoss || false,
+                slowed: false,
+                slowTimer: 0
+            });
+        }
+
+        function enemyShoot(enemy) {
+            const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+            bullets.push({
+                x: enemy.x,
+                y: enemy.y,
+                vx: Math.cos(angle) * 4,
+                vy: Math.sin(angle) * 4,
+                damage: 8,
+                enemy: true,
+                piercing: 0,
+                hitEnemies: []
+            });
+        }
+
+        function killEnemy(enemy, index) {
+            const expBonus = 1 + saveData.upgrades.expBonus * UPGRADE_CONFIG[3].effect;
+            const expAmount = enemy.exp * expBonus * player.expMultiplier;
+            
+            expGems.push({
+                x: enemy.x,
+                y: enemy.y,
+                value: expAmount
+            });
+            
+            if (player.explodeChance > 0 && Math.random() < player.explodeChance) {
+                enemies.forEach((e, i) => {
+                    if (distance(enemy.x, enemy.y, e.x, e.y) < 60) {
+                        e.hp -= 30;
+                    }
+                });
+                createParticles(enemy.x, enemy.y, '#ff6b6b', 15);
+            }
+            
+            createParticles(enemy.x, enemy.y, enemy.color, 8);
+            
+            enemies.splice(index, 1);
+            killCount++;
+            
+            playSound('kill');
+        }
+
+        // ==================== 子弹系统 ====================
+        function updateBullets(dt) {
+            bullets.forEach((bullet, index) => {
+                bullet.x += bullet.vx;
+                bullet.y += bullet.vy;
+                
+                if (bullet.x < -50 || bullet.x > CONFIG.CANVAS_WIDTH + 50 ||
+                    bullet.y < -50 || bullet.y > CONFIG.CANVAS_HEIGHT + 50) {
+                    bullets.splice(index, 1);
+                    return;
+                }
+                
+                if (bullet.enemy) {
+                    if (distance(bullet.x, bullet.y, player.x, player.y) < CONFIG.PLAYER_SIZE) {
+                        damagePlayer(bullet.damage);
+                        bullets.splice(index, 1);
+                    }
+                } else {
+                    for (let i = enemies.length - 1; i >= 0; i--) {
+                        const enemy = enemies[i];
+                        if (bullet.hitEnemies.includes(i)) continue;
+                        
+                        if (distance(bullet.x, bullet.y, enemy.x, enemy.y) < enemy.size) {
+                            enemy.hp -= bullet.damage;
+                            bullet.hitEnemies.push(i);
+                            
+                            if (player.slowEffect) {
+                                enemy.slowed = true;
+                                enemy.slowTimer = 2000;
+                                enemy.speed = enemy.baseSpeed * 0.7;
+                            }
+                            
+                            if (player.splash > 0) {
+                                enemies.forEach((e, j) => {
+                                    if (j !== i && distance(enemy.x, enemy.y, e.x, e.y) < player.splash) {
+                                        e.hp -= bullet.damage * 0.5;
+                                    }
+                                });
+                            }
+                            
+                            if (bullet.piercing <= 0) {
+                                bullets.splice(index, 1);
+                            } else {
+                                bullet.piercing--;
+                            }
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
+        // ==================== 经验宝石 ====================
+        function updateExpGems(dt) {
+            expGems.forEach((gem, index) => {
+                const dist = distance(player.x, player.y, gem.x, gem.y);
+                
+                if (dist < player.magnetRange) {
+                    const angle = Math.atan2(player.y - gem.y, player.x - gem.x);
+                    const speed = (player.magnetRange - dist) / 10;
+                    gem.x += Math.cos(angle) * speed;
+                    gem.y += Math.sin(angle) * speed;
+                }
+                
+                if (dist < CONFIG.PLAYER_SIZE) {
+                    player.exp += gem.value;
+                    expGems.splice(index, 1);
+                    checkExp();
+                    playSound('pickup');
+                }
+            });
+        }
+
+        // ==================== 粒子系统 ====================
+        function createParticles(x, y, color, count) {
+            if (saveData.settings.quality === 'low') count = Math.floor(count / 2);
+            
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1 + Math.random() * 3;
+                particles.push({
+                    x, y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1,
+                    color,
+                    size: 2 + Math.random() * 3
+                });
+            }
+        }
+
+        function updateParticles(dt) {
+            particles.forEach((p, index) => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02;
+                p.vx *= 0.95;
+                p.vy *= 0.95;
+                
+                if (p.life <= 0) {
+                    particles.splice(index, 1);
+                }
+            });
+            
+            const maxParticles = saveData.settings.quality === 'high' ? 200 : 
+                                saveData.settings.quality === 'medium' ? 100 : 50;
+            if (particles.length > maxParticles) {
+                particles.splice(0, particles.length - maxParticles);
+            }
+        }
+
+        // ==================== 渲染 ====================
+        function render() {
+            ctx.fillStyle = '#0f3460';
+            ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+            
+            drawGrid();
+            
+            if (gameState === 'menu') return;
+            
+            expGems.forEach(gem => {
+                ctx.fillStyle = '#4ade80';
+                ctx.fillRect(gem.x - CONFIG.EXP_GEM_SIZE/2, gem.y - CONFIG.EXP_GEM_SIZE/2, 
+                           CONFIG.EXP_GEM_SIZE, CONFIG.EXP_GEM_SIZE);
+            });
+            
+            enemies.forEach(enemy => {
+                ctx.fillStyle = enemy.color;
+                ctx.fillRect(enemy.x - enemy.size, enemy.y - enemy.size, enemy.size * 2, enemy.size * 2);
+                
+                if (enemy.hp < enemy.maxHp) {
+                    const barWidth = enemy.size * 2;
+                    const barHeight = 4;
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(enemy.x - barWidth/2, enemy.y - enemy.size - 8, barWidth, barHeight);
+                    ctx.fillStyle = '#e94560';
+                    ctx.fillRect(enemy.x - barWidth/2, enemy.y - enemy.size - 8, 
+                               barWidth * (enemy.hp / enemy.maxHp), barHeight);
+                }
+                
+                if (enemy.slowed) {
+                    ctx.strokeStyle = '#87ceeb';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(enemy.x - enemy.size, enemy.y - enemy.size, enemy.size * 2, enemy.size * 2);
+                }
+            });
+            
+            bullets.forEach(bullet => {
+                ctx.fillStyle = bullet.enemy ? '#ff6b6b' : '#ffd700';
+                ctx.fillRect(bullet.x - CONFIG.BULLET_SIZE/2, bullet.y - CONFIG.BULLET_SIZE/2,
+                           CONFIG.BULLET_SIZE, CONFIG.BULLET_SIZE);
+            });
+            
+            if (!player.invincible || Math.floor(Date.now() / 100) % 2) {
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(player.x - CONFIG.PLAYER_SIZE/2, player.y - CONFIG.PLAYER_SIZE/2,
+                           CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE);
+                
+                if (player.shield) {
+                    ctx.strokeStyle = '#4ade80';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(player.x, player.y, CONFIG.PLAYER_SIZE + 5, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+            
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+            ctx.lineWidth = 1;
+            
+            const gridSize = 40;
+            for (let x = 0; x < CONFIG.CANVAS_WIDTH; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, CONFIG.CANVAS_HEIGHT);
+                ctx.stroke();
+            }
+            for (let y = 0; y < CONFIG.CANVAS_HEIGHT; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(CONFIG.CANVAS_WIDTH, y);
+                ctx.stroke();
+            }
+        }
+
+        function updateHUD() {
+            const hpPercent = (player.hp / player.maxHp) * 100;
+            document.getElementById('hpFill').style.width = hpPercent + '%';
+            document.getElementById('hpText').textContent = `${Math.ceil(player.hp)}/${player.maxHp}`;
+            
+            const expPercent = (player.exp / player.expToNext) * 100;
+            document.getElementById('expFill').style.width = expPercent + '%';
+            
+            document.getElementById('levelText').textContent = `Lv.${player.level}`;
+            document.getElementById('timeText').textContent = formatTime(gameTime);
+        }
+
+        // ==================== 音效系统 ====================
+        let audioCtx = null;
+        
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type) {
+            if (!saveData.settings.sfx) return;
+            
+            initAudio();
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            switch(type) {
+                case 'start':
+                    oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
+                    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.2);
+                    break;
+                case 'kill':
+                    oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.1);
+                    gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.1);
+                    break;
+                case 'hurt':
+                    oscillator.type = 'sawtooth';
+                    oscillator.frequency.setValueAtTime(200, audioCtx.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.15);
+                    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.15);
+                    break;
+                case 'levelup':
+                    oscillator.frequency.setValueAtTime(523, audioCtx.currentTime);
+                    oscillator.frequency.setValueAtTime(659, audioCtx.currentTime + 0.1);
+                    oscillator.frequency.setValueAtTime(784, audioCtx.currentTime + 0.2);
+                    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.3);
+                    break;
+                case 'pick':
+                    oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+                    gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.1);
+                    break;
+                case 'pickup':
+                    oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime);
+                    gainNode.gain.setValueAtTime(0.03, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.05);
+                    break;
+                case 'shield':
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1);
+                    gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.15);
+                    break;
+                case 'gameover':
+                    oscillator.type = 'sawtooth';
+                    oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.5);
+                    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.5);
+                    break;
+            }
+        }
+
+        // ==================== 永久强化界面 ====================
+        function showUpgrade() {
+            hideAllPanels();
+            document.getElementById('upgradePanel').classList.add('active');
+            renderUpgradeList();
+        }
+
+        function renderUpgradeList() {
+            document.getElementById('coinDisplay').textContent = saveData.coins;
+            
+            const container = document.getElementById('upgradeList');
+            container.innerHTML = '';
+            
+            UPGRADE_CONFIG.forEach(upgrade => {
+                const level = saveData.upgrades[upgrade.id];
+                const cost = Math.floor(upgrade.baseCost * Math.pow(1.5, level));
+                const maxed = level >= upgrade.maxLevel;
+                const canAfford = saveData.coins >= cost;
+                
+                const item = document.createElement('div');
+                item.className = 'upgrade-item';
+                item.innerHTML = `
+                    <div class="upgrade-info">
+                        <div class="upgrade-name">${upgrade.name}</div>
+                        <div class="upgrade-level">等级 ${level}/${upgrade.maxLevel} - ${upgrade.desc}</div>
+                    </div>
+                    <button class="upgrade-btn" ${maxed || !canAfford ? 'disabled' : ''}>
+                        ${maxed ? '已满级' : cost + ' 币'}
+                    </button>
+                `;
+                
+                if (!maxed && canAfford) {
+                    item.querySelector('.upgrade-btn').onclick = () => buyUpgrade(upgrade.id);
+                }
+                
+                container.appendChild(item);
+            });
+        }
+
+        function buyUpgrade(id) {
+            const upgrade = UPGRADE_CONFIG.find(u => u.id === id);
+            const level = saveData.upgrades[id];
+            const cost = Math.floor(upgrade.baseCost * Math.pow(1.5, level));
+            
+            if (saveData.coins >= cost && level < upgrade.maxLevel) {
+                saveData.coins -= cost;
+                saveData.upgrades[id]++;
+                saveGame();
+                renderUpgradeList();
+                playSound('pick');
+            }
+        }
+
+        // ==================== 设置界面 ====================
+        function showSettings() {
+            hideAllPanels();
+            document.getElementById('settingsPanel').classList.add('active');
+        }
+
+        function toggleBgm() {
+            saveData.settings.bgm = !saveData.settings.bgm;
+            document.getElementById('bgmToggle').classList.toggle('active', saveData.settings.bgm);
+            saveGame();
+        }
+
+        function toggleSfx() {
+            saveData.settings.sfx = !saveData.settings.sfx;
+            document.getElementById('sfxToggle').classList.toggle('active', saveData.settings.sfx);
+            saveGame();
+        }
+
+        function resetSave() {
+            if (confirm('确定要重置所有存档吗？此操作不可恢复！')) {
+                localStorage.removeItem('pixelSurvivorSave');
+                saveData = {
+                    coins: 0,
+                    upgrades: { maxHp: 0, moveSpeed: 0, attackSpeed: 0, expBonus: 0, coinBonus: 0 },
+                    settings: { bgm: true, sfx: true, quality: 'medium' },
+                    highScore: { time: 0, kills: 0 }
+                };
+                applySettings();
+                alert('存档已重置');
+            }
+        }
+
+        function showGuide() {
+            hideAllPanels();
+            document.getElementById('guidePanel').classList.add('active');
+        }
+
+        // ==================== 工具函数 ====================
+        function distance(x1, y1, x2, y2) {
+            return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+        }
+
+        function shuffleArray(array) {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        function formatTime(ms) {
+            const seconds = Math.floor(ms / 1000);
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // ==================== 游戏主循环 ====================
+        function gameLoop(timestamp) {
+            const dt = timestamp - lastTime;
+            lastTime = timestamp;
+            
+            if (gameState === 'playing') {
+                gameTime += dt;
+                
+                updatePlayer(dt);
+                updateEnemies(dt);
+                updateBullets(dt);
+                updateExpGems(dt);
+                updateParticles(dt);
+                updateHUD();
+            }
+            
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.getElementById('qualitySelect').addEventListener('change', (e) => {
+            saveData.settings.quality = e.target.value;
+            saveGame();
+        });
+
+        window.onload = init;
+    </script>
+</body>
+</html>
