@@ -395,21 +395,25 @@ class Renderer {
 }
 
 // ============================================================
-// 【修改：删除自动横竖屏检测，固定横屏模式】
+// 强制横屏模式：不自动旋转DOM，画布固定16:9横屏，由用户手动转动手机
 // ============================================================
 class ScreenManager {
   constructor(){
     this.el=document.getElementById('game-container');
-    this.rotated=false;
+    this.rotated=false; // 永远false，不再做DOM旋转
     this.onChange=null;
-    // 固定为横屏布局，不再监听旋转、不再自动旋转
+    // 取消resize/orientationchange自动重算，不再监听屏幕方向
+    // 隐藏旋转提示，永远不显示
+    document.getElementById('rotate-tip').style.display='none';
+  }
+  update(){
+    // 不再根据手机方向修改DOM，容器固定原始状态
     this.el.style.width='100%';
     this.el.style.height='100%';
     this.el.style.transform='rotate(0deg)';
-    document.getElementById('rotate-tip').style.display='none';
   }
+  // 坐标映射：直接返回原始坐标，不再做横竖屏转换
   map(x,y){
-    // 不再做旋转坐标转换，直接返回原始坐标
     return {x,y};
   }
 }
