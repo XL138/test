@@ -16,10 +16,8 @@
   #game-container { position:relative; aspect-ratio:16/9; width:100%; height:100%; max-width:100vw; max-height:100vh; overflow:hidden; transform-origin:center center; }
   #game-canvas { width:100%; height:100%; image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
 
-  /* 强制横屏旋转提示 【已禁用】 */
-  #rotate-tip { display:none; position:fixed; inset:0; background:#000; color:#fff; font-size:20px; flex-direction:column; align-items:center; justify-content:center; z-index:9999; text-align:center; line-height:2; }
-  #rotate-tip .ico { font-size:64px; animation:rot 1.6s infinite; }
-  @keyframes rot { 0%,100%{transform:rotate(0)} 50%{transform:rotate(90deg)} }
+  /* 删掉强制横屏旋转提示 */
+  #rotate-tip { display:none !important; }
 
   .ui-layer { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
   .ui-layer > * { pointer-events:auto; }
@@ -397,25 +395,21 @@ class Renderer {
 }
 
 // ============================================================
-// 强制横屏管理【修改：移除自动检测，强制横屏】
+// 【修改：删除自动横竖屏检测，固定横屏模式】
 // ============================================================
 class ScreenManager {
-  constructor(){ this.el=document.getElementById('game-container'); this.rotated=false; this.onChange=null;
-    // 强制固定横屏，不再监听resize/orientationchange
-    this.update();
-  }
-  update(){
-    // 强制横屏，不再判断横竖屏
+  constructor(){
+    this.el=document.getElementById('game-container');
+    this.rotated=false;
+    this.onChange=null;
+    // 固定为横屏布局，不再监听旋转、不再自动旋转
     this.el.style.width='100%';
     this.el.style.height='100%';
     this.el.style.transform='rotate(0deg)';
-    this.rotated=false;
-    // 永远隐藏旋转提示
-    document.getElementById('rotate-tip').style.display = 'none';
-    if(this.onChange) this.onChange(this.rotated);
+    document.getElementById('rotate-tip').style.display='none';
   }
   map(x,y){
-    // 强制不旋转，直接返回原始坐标
+    // 不再做旋转坐标转换，直接返回原始坐标
     return {x,y};
   }
 }
@@ -454,4 +448,7 @@ class SpriteFactory {
     this.r.sprite('tile_desert',16,16,c=>{ c.fillStyle='#D7B260'; c.fillRect(0,0,16,16); c.fillStyle='#E4C87E'; c.fillRect(3,4,2,2); c.fillRect(10,9,2,2); c.fillStyle='#C19A3C'; c.fillRect(6,12,2,2); c.fillRect(12,3,2,2); });
     this.r.sprite('tile_tundra',16,16,c=>{ c.fillStyle='#CDE6F5'; c.fillRect(0,0,16,16); c.fillStyle='#E8F6FF'; c.fillRect(3,3,2,2); c.fillRect(9,6,2,2); c.fillStyle='#A7C8DE'; c.fillRect(12,10,2,2); c.fillRect(5,12,2,2); });
     this.r.sprite('tile_volcano',16,16,c=>{ c.fillStyle='#4E342E'; c.fillRect(0,0,16,16); c.fillStyle='#6D4C41'; c.fillRect(4,3,2,2); c.fillRect(11,7,2,2); c.fillStyle='#E64A19'; c.fillRect(6,11,2,2); c.fillRect(13,12,2,2); });
-    this.r.sprite('tile_swamp',16,16,c=>{ c.fillStyle='#5A6B3A'; c.fillRect(0,0,16,16); c.fillStyle='#7A8C52'; c.fillRect(3,3,2,2); c.fillRect(10,8,2,2); c.fillStyle='#4A
+    this.r.sprite('tile_swamp',16,16,c=>{ c.fillStyle='#5A6B3A'; c.fillRect(0,0,16,16); c.fillStyle='#7A8C52'; c.fillRect(3,3,2,2); c.fillRect(10,8,2,2); c.fillStyle='#4A5A30'; c.fillRect(6,12,2,2); c.fillRect(12,4,2,2); });
+    this.r.sprite('tile_void',16,16,c=>{ c.fillStyle='#2A1140'; c.fillRect(0,0,16,16); c.fillStyle='#3D1B5E'; c.fillRect(3,4,2,2); c.fillRect(11,8,2,2); c.fillStyle='#B948C2'; c.fillRect(7,11,2,2); c.fillRect(12,13,2,2); });
+    // 通用岩/路
+    this.r.sprite('tile_road',16,16,c=>{ c.fillStyle='#8D6E63'; c.fillRect(0,0,16,16); c.fillStyle='#A1887F'; c.fillRect(3,3,2,2); c.fill
