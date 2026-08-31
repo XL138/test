@@ -17,24 +17,6 @@
   #game-container { position:relative; aspect-ratio:16/9; width:min(100vw, calc(100vh * 16 / 9)); height:min(100vh, calc(100vw * 9 / 16)); overflow:hidden; transform-origin:center center; }
   #game-canvas { width:100%; height:100%; image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
 
-  /* 横屏引导动画：零环境检测，固定3秒自动消失，适配所有浏览器 */
-  #rotate-anim { position:fixed; top:0; left:0; width:100%; height:100%; background:#0d0d1a; z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; transition:opacity .5s ease; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-  #rotate-anim.hide { opacity:0; pointer-events:none; }
-  #rotate-anim .phone { width:68px; height:116px; border:4px solid #e8e8e8; border-radius:12px; position:relative; animation:phoneRotate 1.6s ease-in-out infinite; background:#1a1a2e; }
-  #rotate-anim .phone::before { content:''; position:absolute; top:7px; left:50%; transform:translateX(-50%); width:22px; height:4px; background:#555; border-radius:2px; }
-  #rotate-anim .phone .scr { position:absolute; top:17px; left:5px; right:5px; bottom:9px; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(4,1fr); gap:3px; padding:3px; }
-  #rotate-anim .phone .scr i { border-radius:2px; opacity:.85; }
-  #rotate-anim .phone .scr i:nth-child(1){background:#4CAF50} #rotate-anim .phone .scr i:nth-child(2){background:#2196F3} #rotate-anim .phone .scr i:nth-child(3){background:#FF9800}
-  #rotate-anim .phone .scr i:nth-child(4){background:#E91E63} #rotate-anim .phone .scr i:nth-child(5){background:#9C27B0} #rotate-anim .phone .scr i:nth-child(6){background:#00BCD4}
-  #rotate-anim .phone .scr i:nth-child(7){background:#FFEB3B} #rotate-anim .phone .scr i:nth-child(8){background:#8BC34A} #rotate-anim .phone .scr i:nth-child(9){background:#FF5722}
-  #rotate-anim .phone .scr i:nth-child(10){background:#607D8B} #rotate-anim .phone .scr i:nth-child(11){background:#795548} #rotate-anim .phone .scr i:nth-child(12){background:#3F51B5}
-  #rotate-anim .title { color:#fff; font-size:24px; font-weight:bold; letter-spacing:4px; margin-top:12px; text-shadow:0 0 12px rgba(255,215,64,.4); }
-  #rotate-anim .sub { color:#8899aa; font-size:13px; letter-spacing:2px; }
-  #rotate-anim .progress { position:absolute; bottom:36px; left:50%; transform:translateX(-50%); width:160px; height:3px; background:rgba(255,255,255,.12); border-radius:2px; overflow:hidden; }
-  #rotate-anim .progress .bar { height:100%; width:0%; background:#FFD740; border-radius:2px; animation:progressFill 3s linear forwards; box-shadow:0 0 8px #FFD740; }
-  @keyframes phoneRotate { 0%,25% { transform:rotate(0deg); } 55%,100% { transform:rotate(-90deg); } }
-  @keyframes progressFill { from { width:0%; } to { width:100%; } }
-
   .ui-layer { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
   .ui-layer > * { pointer-events:auto; }
 
@@ -146,13 +128,6 @@
 </head>
 <body>
   
-  <div id="rotate-anim">
-    <div class="phone"><div class="scr"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
-    <div class="title">请横屏游玩</div>
-    <div class="sub">旋转手机获得最佳游戏体验</div>
-    <div class="progress"><div class="bar"></div></div>
-  </div>
-
   <div id="game-root">
     <div id="game-container">
       <canvas id="game-canvas"></canvas>
@@ -383,7 +358,6 @@ const TIER_WEIGHT = { normal:60, rare:30, relic:10 };
 // ============================================================
 const Utils = {
   isMobile(){ return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || /[?&]forcemobile=1/.test(location.search); },
-  isPortrait(){ return window.innerHeight > window.innerWidth; },
   rnd(a,b){ return Math.random()*(b-a)+a; },
   rndInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; },
   clamp(v,a,b){ return v<a?a:(v>b?b:v); },
@@ -1761,30 +1735,13 @@ class Game {
 // 启动
 // ============================================================
 window.addEventListener('DOMContentLoaded',()=>{
-  // ===== 横屏引导动画（最先处理，独立于游戏初始化，确保任何情况下都不会卡住）=====
-  const rotAnim=document.getElementById('rotate-anim');
-  const hideRotAnim=()=>{ if(!rotAnim)return; rotAnim.classList.add('hide'); setTimeout(()=>{ if(rotAnim) rotAnim.style.display='none'; },520); };
-  if(rotAnim){
-    if(!Utils.isMobile()){
-      // 电脑端：直接跳过，不显示动画
-      rotAnim.style.display='none';
-    } else {
-      // 手机端：固定3秒自动消失 + 点击/触摸即消失（双保险，不依赖任何方向检测）
-      rotAnim.addEventListener('click',hideRotAnim,{once:true});
-      rotAnim.addEventListener('touchstart',hideRotAnim,{once:true});
-      setTimeout(hideRotAnim,3000);
-    }
-  }
-
-  // ===== 游戏初始化（try-catch 防崩，初始化失败也不影响动画层消失）=====
+  // 游戏直接启动，无任何横屏检测/提示，手机端电脑端一致
   let game=null;
   try{
-    game=new Game(); window.__game=game; // 调试钩子：便于外部实时读取游戏状态
+    game=new Game(); window.__game=game;
   }catch(e){
     console.error('[Game] init error:',e);
-    hideRotAnim(); // 初始化失败也确保动画层消失，露出底层界面
   }
-
   if(game){
     const watched=Utils.storage.get(CONFIG.STORAGE.WATCHED,false) || /[?&]intro=0/.test(location.search) || /[?&]lvlup=1/.test(location.search);
     if(!watched){ setTimeout(()=>game.playStory(),300); }
