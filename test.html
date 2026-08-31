@@ -18,7 +18,7 @@
   #game-canvas { width:100%; height:100%; image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
 
   /* 横屏引导动画：零环境检测，固定3秒自动消失，适配所有浏览器 */
-  #rotate-anim { position:fixed; top:0; left:0; width:100%; height:100%; background:#0d0d1a; z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; transition:opacity .5s ease; }
+  #rotate-anim { position:fixed; top:0; left:0; width:100%; height:100%; background:#0d0d1a; z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; transition:opacity .5s ease; cursor:pointer; -webkit-tap-highlight-color:transparent; }
   #rotate-anim.hide { opacity:0; pointer-events:none; }
   #rotate-anim .phone { width:68px; height:116px; border:4px solid #e8e8e8; border-radius:12px; position:relative; animation:phoneRotate 1.6s ease-in-out infinite; background:#1a1a2e; }
   #rotate-anim .phone::before { content:''; position:absolute; top:7px; left:50%; transform:translateX(-50%); width:22px; height:4px; background:#555; border-radius:2px; }
@@ -382,7 +382,7 @@ const TIER_WEIGHT = { normal:60, rare:30, relic:10 };
 // 工具
 // ============================================================
 const Utils = {
-  isMobile(){ return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent); },
+  isMobile(){ return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || /[?&]forcemobile=1/.test(location.search); },
   isPortrait(){ return window.innerHeight > window.innerWidth; },
   rnd(a,b){ return Math.random()*(b-a)+a; },
   rndInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; },
@@ -1761,14 +1761,36 @@ class Game {
 // 启动
 // ============================================================
 window.addEventListener('DOMContentLoaded',()=>{
-  const game=new Game(); window.__game=game; // 调试钩子：便于外部实时读取游戏状态
-  // 横屏引导动画：零环境检测，固定3秒自动淡出，所有浏览器一致
+  // ===== 横屏引导动画（最先处理，独立于游戏初始化，确保任何情况下都不会卡住）=====
   const rotAnim=document.getElementById('rotate-anim');
-  if(rotAnim){ setTimeout(()=>{ rotAnim.classList.add('hide'); setTimeout(()=>{ rotAnim.style.display='none'; },520); },3000); }
-  const watched=Utils.storage.get(CONFIG.STORAGE.WATCHED,false) || /[?&]intro=0/.test(location.search) || /[?&]lvlup=1/.test(location.search);
-  if(!watched){ setTimeout(()=>game.playStory(),300); }
-  const unlock=()=>{ document.removeEventListener('click',unlock); document.removeEventListener('touchstart',unlock); };
-  document.addEventListener('click',unlock); document.addEventListener('touchstart',unlock);
+  const hideRotAnim=()=>{ if(!rotAnim)return; rotAnim.classList.add('hide'); setTimeout(()=>{ if(rotAnim) rotAnim.style.display='none'; },520); };
+  if(rotAnim){
+    if(!Utils.isMobile()){
+      // 电脑端：直接跳过，不显示动画
+      rotAnim.style.display='none';
+    } else {
+      // 手机端：固定3秒自动消失 + 点击/触摸即消失（双保险，不依赖任何方向检测）
+      rotAnim.addEventListener('click',hideRotAnim,{once:true});
+      rotAnim.addEventListener('touchstart',hideRotAnim,{once:true});
+      setTimeout(hideRotAnim,3000);
+    }
+  }
+
+  // ===== 游戏初始化（try-catch 防崩，初始化失败也不影响动画层消失）=====
+  let game=null;
+  try{
+    game=new Game(); window.__game=game; // 调试钩子：便于外部实时读取游戏状态
+  }catch(e){
+    console.error('[Game] init error:',e);
+    hideRotAnim(); // 初始化失败也确保动画层消失，露出底层界面
+  }
+
+  if(game){
+    const watched=Utils.storage.get(CONFIG.STORAGE.WATCHED,false) || /[?&]intro=0/.test(location.search) || /[?&]lvlup=1/.test(location.search);
+    if(!watched){ setTimeout(()=>game.playStory(),300); }
+    const unlock=()=>{ document.removeEventListener('click',unlock); document.removeEventListener('touchstart',unlock); };
+    document.addEventListener('click',unlock); document.addEventListener('touchstart',unlock);
+  }
 });
 </script>
 </body>
