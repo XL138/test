@@ -12,10 +12,30 @@
     user-select:none; -webkit-user-select:none; touch-action:none;
     -webkit-tap-highlight-color: transparent;
   }
-  #game-root { position:fixed; top:0; left:0; width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; background:#000; }
-  /* 始终按 16:9 等比缩放铺满可见区域：横屏适配，任意方向都不变形、不超框 */
-  #game-container { position:relative; aspect-ratio:16/9; width:min(100vw, calc(100vh * 16 / 9)); height:min(100vh, calc(100vw * 9 / 16)); overflow:hidden; transform-origin:center center; }
-  #game-canvas { width:100%; height:100%; image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
+  #game-root { position:fixed; top:0; left:0; width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; background:#000; transition:transform .35s ease; }
+  /* 竖屏时强制横屏：旋转 90° 铺满（不管手机物理方向，游戏始终横屏展示） */
+  #game-root.rotate { width:100vh; height:100vw; transform:rotate(90deg) translateY(-100%); transform-origin:top left; }
+  /* 16:9 画布基于父容器自适应铺满（旋转/横竖屏都正确） */
+  #game-container { position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  #game-canvas { max-width:100%; max-height:100%; aspect-ratio:16/9; image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
+
+  /* 横屏提醒动画：全屏展示，固定3秒自动消失（不依赖任何方向检测，永不卡住） */
+  #rotate-anim { position:fixed; top:0; left:0; width:100%; height:100%; background:#0d0d1a; z-index:99999; display:none; flex-direction:column; align-items:center; justify-content:center; gap:14px; transition:opacity .5s ease; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  #rotate-anim.hide { opacity:0; pointer-events:none; }
+  #rotate-anim .phone { width:68px; height:116px; border:4px solid #e8e8e8; border-radius:12px; position:relative; animation:phoneRotate 1.6s ease-in-out infinite; background:#1a1a2e; }
+  #rotate-anim .phone::before { content:''; position:absolute; top:7px; left:50%; transform:translateX(-50%); width:22px; height:4px; background:#555; border-radius:2px; }
+  #rotate-anim .phone .scr { position:absolute; top:17px; left:5px; right:5px; bottom:9px; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(4,1fr); gap:3px; padding:3px; }
+  #rotate-anim .phone .scr i { border-radius:2px; opacity:.85; }
+  #rotate-anim .phone .scr i:nth-child(1){background:#4CAF50} #rotate-anim .phone .scr i:nth-child(2){background:#2196F3} #rotate-anim .phone .scr i:nth-child(3){background:#FF9800}
+  #rotate-anim .phone .scr i:nth-child(4){background:#E91E63} #rotate-anim .phone .scr i:nth-child(5){background:#9C27B0} #rotate-anim .phone .scr i:nth-child(6){background:#00BCD4}
+  #rotate-anim .phone .scr i:nth-child(7){background:#FFEB3B} #rotate-anim .phone .scr i:nth-child(8){background:#8BC34A} #rotate-anim .phone .scr i:nth-child(9){background:#FF5722}
+  #rotate-anim .phone .scr i:nth-child(10){background:#607D8B} #rotate-anim .phone .scr i:nth-child(11){background:#795548} #rotate-anim .phone .scr i:nth-child(12){background:#3F51B5}
+  #rotate-anim .title { color:#fff; font-size:24px; font-weight:bold; letter-spacing:4px; margin-top:12px; text-shadow:0 0 12px rgba(255,215,64,.4); }
+  #rotate-anim .sub { color:#8899aa; font-size:13px; letter-spacing:2px; }
+  #rotate-anim .progress { position:absolute; bottom:36px; left:50%; transform:translateX(-50%); width:160px; height:3px; background:rgba(255,255,255,.12); border-radius:2px; overflow:hidden; }
+  #rotate-anim .progress .bar { height:100%; width:0%; background:#FFD740; border-radius:2px; animation:progressFill 3s linear forwards; box-shadow:0 0 8px #FFD740; }
+  @keyframes phoneRotate { 0%,25% { transform:rotate(0deg); } 55%,100% { transform:rotate(-90deg); } }
+  @keyframes progressFill { from { width:0%; } to { width:100%; } }
 
   .ui-layer { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
   .ui-layer > * { pointer-events:auto; }
@@ -127,6 +147,13 @@
 </style>
 </head>
 <body>
+  <!-- 横屏提醒动画：固定3秒自动消失，点击/触摸可立即跳过，不依赖任何方向检测 -->
+  <div id="rotate-anim">
+    <div class="phone"><div class="scr"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="title">请横屏游玩</div>
+    <div class="sub">旋转手机获得最佳游戏体验</div>
+    <div class="progress"><div class="bar"></div></div>
+  </div>
   
   <div id="game-root">
     <div id="game-container">
@@ -364,6 +391,7 @@ const Utils = {
   dist(ax,ay,bx,by){ const dx=ax-bx,dy=ay-by; return Math.sqrt(dx*dx+dy*dy); },
   rr(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y; },
   pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; },
+  isPortrait(){ return window.innerHeight > window.innerWidth; },
   storage:{
     get(k,d){ try{ const v=localStorage.getItem(k); return v===null?d:JSON.parse(v);}catch(e){ return d; } },
     set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
@@ -991,7 +1019,7 @@ class StoryPlayer {
 // 输入系统（PC 键盘 + 移动端摇杆，支持旋转映射）
 // ============================================================
 class InputManager {
-  constructor(){ this.keys={up:false,down:false,left:false,right:false};
+  constructor(){ this.keys={up:false,down:false,left:false,right:false}; this.rotated=false;
     this.joystick={active:false,dx:0,dy:0};
     window.addEventListener('keydown',e=>{ const k=e.key.toLowerCase();
       if(k==='w'||k==='arrowup')this.keys.up=true; if(k==='s'||k==='arrowdown')this.keys.down=true;
@@ -1012,7 +1040,12 @@ class InputManager {
       this.joystick.dx=dx/R; this.joystick.dy=dy/R; },{passive:false});
     const end=e=>{ e.preventDefault(); this.joystick.active=false; this.joystick.dx=0; this.joystick.dy=0; thumb.style.transform='translate(-50%,-50%)'; };
     el.addEventListener('touchend',end,{passive:false}); el.addEventListener('touchcancel',end,{passive:false}); }
-  get(){ if(Utils.isMobile()&&this.joystick.active) return { left:this.joystick.dx<-0.2, right:this.joystick.dx>0.2, up:this.joystick.dy<-0.2, down:this.joystick.dy>0.2 };
+  get(){ if(Utils.isMobile()&&this.joystick.active){
+    // 竖屏强制横屏旋转后：屏幕方向 → 世界方向（90° 逆映射）
+    let dx=this.joystick.dx, dy=this.joystick.dy;
+    if(this.rotated){ const t=dx; dx=dy; dy=-t; }
+    return { left:dx<-0.2, right:dx>0.2, up:dy<-0.2, down:dy>0.2 };
+  }
     return this.keys; }
 }
 
@@ -1650,8 +1683,17 @@ class Game {
   canvasToWorld(e){
     const rect=this.canvas.getBoundingClientRect();
     const px=e.clientX-rect.left, py=e.clientY-rect.top;
-    const x=Utils.clamp(px/rect.width*CONFIG.W,0,CONFIG.W)+this.r.cam.x;
-    const y=Utils.clamp(py/rect.height*CONFIG.H,0,CONFIG.H)+this.r.cam.y;
+    let wx, wy;
+    if(this.input&&this.input.rotated){
+      // 旋转90°后：视口(px,py) → 画布逻辑坐标（竖屏强制横屏）
+      wx=py/rect.height*CONFIG.W;
+      wy=(rect.width-px)/rect.width*CONFIG.H;
+    } else {
+      wx=px/rect.width*CONFIG.W;
+      wy=py/rect.height*CONFIG.H;
+    }
+    const x=Utils.clamp(wx,0,CONFIG.W)+this.r.cam.x;
+    const y=Utils.clamp(wy,0,CONFIG.H)+this.r.cam.y;
     return {x,y,px,py};
   }
   onCanvasClick(e){ if(this.mode!=='run'||this.state!=='playing') return; const w=this.canvasToWorld(e); this.inspectAt(w.x,w.y); }
@@ -1678,7 +1720,16 @@ class Game {
     el.querySelector('.tt-desc').textContent=desc;
     // 世界坐标 → 屏幕位置（贴附在物件上方）
     const rect=this.canvas.getBoundingClientRect();
-    const sx=(worldPos.x-this.r.cam.x)/CONFIG.W*rect.width, sy=(worldPos.y-this.r.cam.y)/CONFIG.H*rect.height;
+    let sx, sy;
+    if(this.input&&this.input.rotated){
+      // 旋转90°后：画布逻辑坐标 → 屏幕位置
+      sx=(worldPos.y-this.r.cam.y)/CONFIG.H*rect.width;
+      sy=(worldPos.x-this.r.cam.x)/CONFIG.W*rect.height;
+      sx=rect.width-sx; // 旋转偏移
+    } else {
+      sx=(worldPos.x-this.r.cam.x)/CONFIG.W*rect.width;
+      sy=(worldPos.y-this.r.cam.y)/CONFIG.H*rect.height;
+    }
     const cx=rect.left+sx, cy=rect.top+sy-30;
     el.style.left=Math.max(8,Math.min(window.innerWidth-200,cx-90))+'px';
     el.style.top=Math.max(8,cy)+'px';
@@ -1735,13 +1786,45 @@ class Game {
 // 启动
 // ============================================================
 window.addEventListener('DOMContentLoaded',()=>{
-  // 游戏直接启动，无任何横屏检测/提示，手机端电脑端一致
+  const root=document.getElementById('game-root');
+  // ===== 强制横屏旋转管理（竖屏→旋转90°横屏铺满；横屏→正常）=====
+  const applyOrientation=()=>{
+    const portrait=Utils.isPortrait() || /[?&]forceportrait=1/.test(location.search);
+    if(root){
+      if(portrait) root.classList.add('rotate');
+      else root.classList.remove('rotate');
+    }
+    if(window.__game&&window.__game.input) window.__game.input.rotated=portrait;
+  };
+  // 初始执行一次（即使方向事件不触发，初始判断也正确，任何浏览器都不会卡住）
+  applyOrientation();
+  window.addEventListener('resize',applyOrientation);
+  window.addEventListener('orientationchange',applyOrientation);
+
+  // ===== 横屏提醒动画：仅在竖屏/移动端竖拿时显示，固定3秒自动消失 + 点击/触摸即跳过（不依赖方向检测，永不卡住）=====
+  const rotAnim=document.getElementById('rotate-anim');
+  const hideRotAnim=()=>{ if(!rotAnim)return; rotAnim.classList.add('hide'); setTimeout(()=>{ if(rotAnim) rotAnim.style.display='none'; },520); };
+  if(rotAnim){
+    // 横屏/电脑端直接隐藏动画，不打扰；仅竖屏（或 forceportrait 模拟）才显示
+    const isPortraitNow=Utils.isPortrait() || /[?&]forceportrait=1/.test(location.search);
+    if(isPortraitNow){
+      rotAnim.style.display='flex';
+      rotAnim.addEventListener('click',hideRotAnim,{once:true});
+      rotAnim.addEventListener('touchstart',hideRotAnim,{once:true});
+      setTimeout(hideRotAnim,3000);
+    }else{
+      rotAnim.style.display='none';
+    }
+  }
+
+  // ===== 游戏初始化（try-catch 防崩）=====
   let game=null;
   try{
     game=new Game(); window.__game=game;
   }catch(e){
     console.error('[Game] init error:',e);
   }
+  applyOrientation(); // 游戏实例化后再同步一次旋转状态
   if(game){
     const watched=Utils.storage.get(CONFIG.STORAGE.WATCHED,false) || /[?&]intro=0/.test(location.search) || /[?&]lvlup=1/.test(location.search);
     if(!watched){ setTimeout(()=>game.playStory(),300); }
