@@ -13,10 +13,11 @@
     -webkit-tap-highlight-color: transparent;
   }
   #game-root { position:fixed; top:0; left:0; width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; background:#000; }
-  #game-container { position:relative; aspect-ratio:16/9; width:100%; height:100%; max-width:100vw; max-height:100vh; overflow:hidden; transform-origin:center center; }
+  /* 始终按 16:9 等比缩放铺满可见区域：横屏适配，任意方向都不变形、不超框 */
+  #game-container { position:relative; aspect-ratio:16/9; width:min(100vw, calc(100vh * 16 / 9)); height:min(100vh, calc(100vw * 9 / 16)); overflow:hidden; transform-origin:center center; }
   #game-canvas { width:100%; height:100%; image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
 
-  /* 删掉强制横屏旋转提示 */
+  /* 保留旋转提示 DOM 但默认隐藏：不再强制提醒用户横屏 */
   #rotate-tip { display:none !important; }
 
   .ui-layer { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
@@ -275,11 +276,15 @@ const ASSETS_CONFIG = {
 const CONFIG = {
   rulesetId: RULESET_ID,
   W: 1280, H: 720, PIXEL: 16,
+  // 大地图：每个区域世界至少 3×3=9 屏
+  WORLD_GRID: 3, WORLD_W: 3840, WORLD_H: 2160,
   FPS_PC: 30, FPS_MOBILE: 24,
   SUBTITLE_MS: 35,
   INVINCIBLE: 0.5,
   BOSS_TIME: 150,          // 区域 BOSS 出场时间（秒）
   MAX_LEVEL: 30,
+  // 怪物上限：保证普通玩家在合理完成范围内，避免怪物拥挤
+  MAX_MONSTERS: 13,
   ANIM: { walk: 8, attack: 12, idle: 4, hurt: 2, die: 10, eff: 15 },
   QUALITY: { HIGH: 1, MEDIUM: 0.5, LOW: 0.2 },
   STORAGE: { WATCHED: 'hasWatchStoryIntro', COINS: 'secretCoins', QUALITY: 'graphicsQuality', SOUND: 'soundEnabled', VOICE: 'voiceEnabled', CLIMATE: 'climateEnabled',
@@ -317,10 +322,10 @@ const WEAPON_ORDER = ['crossbow','frost','hammer','storm','flame'];
 
 // ---- 英雄（同 V3 配置）----
 const HEROES = {
-  wanderer: { key:'wanderer', name:'秘境流浪者', w:32,h:32,colW:20,colH:24, hp:130, speed:150, dmg:10, fireRate:1.2, projSpeed:320, pickup:60, unlockCost:0, sprite:'hero_wanderer', desc:'均衡型初始角色。属性全面，上手即用。' },
-  ranger:   { key:'ranger', name:'疾风猎手', w:32,h:32,colW:18,colH:22, hp:70, speed:220, dmg:8, fireRate:2.0, projSpeed:430, pickup:70, unlockCost:60, sprite:'hero_ranger', desc:'高速游击型。移速快、攻速高，风刃连射。' },
-  guardian: { key:'guardian', name:'壁垒卫士', w:36,h:36,colW:28,colH:30, hp:180, speed:90, dmg:14, fireRate:0.8, projSpeed:0, pickup:55, unlockCost:80, sprite:'hero_guardian', desc:'坦克近战型。巨锤砸地造成范围冲击波。' },
-  mage:     { key:'mage', name:'虚空术士', w:32,h:32,colW:18,colH:24, hp:80, speed:130, dmg:18, fireRate:1.0, projSpeed:260, pickup:90, unlockCost:100, sprite:'hero_mage', desc:'法术型。魔弹高伤，拾取范围+50%。' }
+  wanderer: { key:'wanderer', name:'秘境流浪者', w:32,h:32,colW:20,colH:24, hp:130, speed:150, dmg:10, fireRate:1.2, projSpeed:320, pickup:240, unlockCost:0, sprite:'hero_wanderer', desc:'均衡型初始角色。属性全面，上手即用。' },
+  ranger:   { key:'ranger', name:'疾风猎手', w:32,h:32,colW:18,colH:22, hp:70, speed:220, dmg:8, fireRate:2.0, projSpeed:430, pickup:250, unlockCost:60, sprite:'hero_ranger', desc:'高速游击型。移速快、攻速高，风刃连射。' },
+  guardian: { key:'guardian', name:'壁垒卫士', w:36,h:36,colW:28,colH:30, hp:180, speed:90, dmg:14, fireRate:0.8, projSpeed:0, pickup:235, unlockCost:80, sprite:'hero_guardian', desc:'坦克近战型。巨锤砸地造成范围冲击波。' },
+  mage:     { key:'mage', name:'虚空术士', w:32,h:32,colW:18,colH:24, hp:80, speed:130, dmg:18, fireRate:1.0, projSpeed:260, pickup:280, unlockCost:100, sprite:'hero_mage', desc:'法术型。魔弹高伤，拾取范围+50%。' }
 };
 
 // ---- 怪物（同 V3 配置）----
@@ -395,27 +400,19 @@ class Renderer {
 }
 
 // ============================================================
-// 强制横屏模式：不自动旋转DOM，画布固定16:9横屏，由用户手动转动手机
+// 强制横屏适配（进入即横屏展示，不再提示用户旋转）
 // ============================================================
 class ScreenManager {
-  constructor(){
-    this.el=document.getElementById('game-container');
-    this.rotated=false; // 永远false，不再做DOM旋转
-    this.onChange=null;
-    // 取消resize/orientationchange自动重算，不再监听屏幕方向
-    // 隐藏旋转提示，永远不显示
-    document.getElementById('rotate-tip').style.display='none';
-  }
+  constructor(){ this.rotated=false; this.onChange=null;
+    this.update(); window.addEventListener('resize',()=>this.update());
+    window.addEventListener('orientationchange',()=>this.update()); }
   update(){
-    // 不再根据手机方向修改DOM，容器固定原始状态
-    this.el.style.width='100%';
-    this.el.style.height='100%';
-    this.el.style.transform='rotate(0deg)';
+    // 不做旋转、不做提示：页面始终按 16:9 等比居中展示，用户自行横持手机
+    this.rotated=false;
+    document.getElementById('rotate-tip').style.display='none';
+    if(this.onChange) this.onChange(false);
   }
-  // 坐标映射：直接返回原始坐标，不再做横竖屏转换
-  map(x,y){
-    return {x,y};
-  }
+  map(x,y){ return {x,y}; }
 }
 
 // ============================================================
@@ -455,4 +452,1318 @@ class SpriteFactory {
     this.r.sprite('tile_swamp',16,16,c=>{ c.fillStyle='#5A6B3A'; c.fillRect(0,0,16,16); c.fillStyle='#7A8C52'; c.fillRect(3,3,2,2); c.fillRect(10,8,2,2); c.fillStyle='#4A5A30'; c.fillRect(6,12,2,2); c.fillRect(12,4,2,2); });
     this.r.sprite('tile_void',16,16,c=>{ c.fillStyle='#2A1140'; c.fillRect(0,0,16,16); c.fillStyle='#3D1B5E'; c.fillRect(3,4,2,2); c.fillRect(11,8,2,2); c.fillStyle='#B948C2'; c.fillRect(7,11,2,2); c.fillRect(12,13,2,2); });
     // 通用岩/路
-    this.r.sprite('tile_road',16,16,c=>{ c.fillStyle='#8D6E63'; c.fillRect(0,0,16,16); c.fillStyle='#A1887F'; c.fillRect(3,3,2,2); c.fill
+    this.r.sprite('tile_road',16,16,c=>{ c.fillStyle='#8D6E63'; c.fillRect(0,0,16,16); c.fillStyle='#A1887F'; c.fillRect(3,3,2,2); c.fillRect(10,9,2,2); c.fillRect(5,13,2,2); });
+    this.r.sprite('tile_corrupt',16,16,c=>{ c.fillStyle='#4A1B5C'; c.fillRect(0,0,16,16); c.fillStyle='#6B2E7D'; c.fillRect(3,4,2,2); c.fillRect(11,8,2,2); c.fillStyle='#2E0A3D'; c.fillRect(8,13,2,2); c.fillStyle='#3B1A52'; c.fillRect(13,3,2,2); });
+    this.r.sprite('tile_rock',16,16,c=>{ c.fillStyle='#757575'; c.fillRect(0,0,16,16); c.fillStyle='#9E9E9E'; c.fillRect(3,4,5,4); c.fillRect(9,9,4,3); c.fillStyle='#555555'; c.fillRect(11,4,3,3); });
+  }
+  makeObjects(){
+    // 醒目版本：加亮描边
+    this.r.sprite('obj_crate',16,16,c=>{ c.fillStyle='#8D6E63'; c.fillRect(1,1,14,14); c.fillStyle='#A1887F'; c.fillRect(1,1,14,3); c.fillStyle='#D4A048'; c.fillRect(7,1,2,14); c.fillRect(1,7,14,2); c.strokeStyle='#FFE082'; c.strokeRect(0.5,0.5,15,15); });
+    this.r.sprite('obj_crate_broken',16,16,c=>{ c.fillStyle='#8D6E63'; c.fillRect(2,8,5,6); c.fillRect(9,2,5,4); c.fillRect(10,9,4,5); });
+    this.r.sprite('obj_pot',14,18,c=>{ c.fillStyle='#C19A6B'; c.fillRect(3,6,8,9); c.fillStyle='#A98151'; c.fillRect(2,5,10,3); c.fillRect(1,8,12,2); c.strokeStyle='#FFE082'; c.strokeRect(0.5,0.5,13,17); });
+    this.r.sprite('obj_rock',24,20,c=>{ c.fillStyle='#757575'; c.fillRect(3,6,18,10); c.fillRect(6,2,12,5); c.fillStyle='#9E9E9E'; c.fillRect(7,4,6,3); c.fillRect(9,8,4,3); c.strokeStyle='#B0BEC5'; c.strokeRect(0.5,0.5,23,19); });
+    this.r.sprite('obj_grass',16,12,c=>{ c.fillStyle='#2E7D32'; c.fillRect(3,4,2,6); c.fillRect(8,3,2,7); c.fillRect(12,5,2,5); c.fillStyle='#4CAF50'; c.fillRect(5,5,2,5); c.fillRect(10,6,2,4); });
+    // 新：区域结晶（可破坏，掉大量经验）
+    this.r.sprite('obj_crystal',16,22,c=>{ c.fillStyle='#26C6DA'; c.fillRect(6,2,4,18); c.fillRect(3,6,3,10); c.fillRect(10,6,3,10); c.fillStyle='#B2EBF2'; c.fillRect(7,4,2,8); c.strokeStyle='#E0F7FA'; c.strokeRect(0.5,0.5,15,21); });
+  }
+  makeHeroes(){
+    const W={hair:'#6B4423',skin:'#F8C398',coat:'#8B5E3C',inner:'#F5E2C0',pants:'#3C3F44',boots:'#593C2B'};
+    const body=(c,f)=>{ c.fillStyle=W.hair; c.fillRect(9,2,14,6); c.fillStyle=W.skin; c.fillRect(10,7,12,6);
+      c.fillStyle='#1a1a1a'; c.fillRect(12,9,2,2); c.fillRect(17,9,2,2);
+      c.fillStyle=W.coat; c.fillRect(8,13,16,10); c.fillStyle=W.inner; c.fillRect(14,13,4,3);
+      f(c); c.fillStyle=W.boots; c.fillRect(9,28,6,4); c.fillRect(17,28,6,4); };
+    this.r.sprite('hero_wanderer_idle',32,32,c=>body(c,cc=>{ cc.fillStyle=W.pants; cc.fillRect(10,23,5,5); cc.fillRect(17,23,5,5); }));
+    this.r.sprite('hero_wanderer_walk1',32,32,c=>body(c,cc=>{ cc.fillStyle=W.pants; cc.fillRect(10,23,5,7); cc.fillRect(17,23,5,5); }));
+    this.r.sprite('hero_wanderer_walk2',32,32,c=>body(c,cc=>{ cc.fillStyle=W.pants; cc.fillRect(10,23,5,5); cc.fillRect(17,23,5,7); }));
+    this.r.sprite('hero_wanderer_attack',32,32,c=>body(c,cc=>{ cc.fillStyle=W.pants; cc.fillRect(10,23,5,5); cc.fillRect(17,23,5,5); cc.fillStyle=W.skin; cc.fillRect(20,10,5,4); }));
+    const R={hair:'#C5C8D1',skin:'#F6BC90',scar:'#7A6558',coat:'#4A9972',band:'#B8B9BC',pants:'#2D4B40',boots:'#635448'};
+    const rbody=(c,f)=>{ c.fillStyle=R.hair; c.fillRect(9,2,14,5); c.fillRect(11,7,6,2); c.fillStyle=R.skin; c.fillRect(11,8,10,5);
+      c.fillStyle=R.scar; c.fillRect(11,10,3,1); c.fillStyle='#2e7d32'; c.fillRect(14,9,2,2); c.fillRect(18,9,2,2);
+      c.fillStyle=R.coat; c.fillRect(9,13,14,10); c.fillStyle=R.band; c.fillRect(19,14,3,3);
+      f(c); c.fillStyle=R.pants; c.fillRect(11,23,4,5); c.fillRect(17,23,4,5); c.fillStyle=R.boots; c.fillRect(10,28,5,4); c.fillRect(17,28,5,4); };
+    this.r.sprite('hero_ranger_idle',32,32,c=>rbody(c,()=>{}));
+    this.r.sprite('hero_ranger_walk1',32,32,c=>rbody(c,cc=>{ cc.fillStyle=R.pants; cc.fillRect(11,23,4,7); cc.fillRect(17,23,4,5); }));
+    this.r.sprite('hero_ranger_walk2',32,32,c=>rbody(c,cc=>{ cc.fillStyle=R.pants; cc.fillRect(11,23,4,5); cc.fillRect(17,23,4,7); }));
+    this.r.sprite('hero_ranger_attack',32,32,c=>rbody(c,cc=>{ cc.fillStyle=R.band; cc.fillRect(8,14,4,2); cc.fillRect(6,16,3,8); cc.fillStyle=R.skin; cc.fillRect(9,17,3,4); }));
+    const G={armor:'#94989E',hair:'#4A3528',badge:'#D4A048',inner:'#593E31',pants:'#3A2C24',boots:'#61544C'};
+    const gbody=(c,f)=>{ c.fillStyle=G.hair; c.fillRect(11,2,14,5); c.fillStyle=G.armor; c.fillRect(8,6,20,7); c.fillStyle='#7a7e84'; c.fillRect(10,7,4,4); c.fillRect(22,7,4,4);
+      c.fillStyle=G.badge; c.fillRect(16,9,4,3); c.fillStyle='#1a1a1a'; c.fillRect(13,10,2,2); c.fillRect(20,10,2,2);
+      c.fillStyle=G.armor; c.fillRect(7,13,22,12); c.fillStyle=G.inner; c.fillRect(15,13,6,6); c.fillStyle=G.badge; c.fillRect(16,16,4,3);
+      f(c); c.fillStyle=G.pants; c.fillRect(12,25,6,6); c.fillRect(19,25,6,6); c.fillStyle=G.boots; c.fillRect(10,31,8,4); c.fillRect(18,31,8,4); };
+    this.r.sprite('hero_guardian_idle',36,36,c=>gbody(c,()=>{}));
+    this.r.sprite('hero_guardian_walk1',36,36,c=>gbody(c,cc=>{ cc.fillStyle=G.pants; cc.fillRect(12,25,6,8); cc.fillRect(19,25,6,6); }));
+    this.r.sprite('hero_guardian_walk2',36,36,c=>gbody(c,cc=>{ cc.fillStyle=G.pants; cc.fillRect(12,25,6,6); cc.fillRect(19,25,6,8); }));
+    this.r.sprite('hero_guardian_attack',36,36,c=>gbody(c,cc=>{ cc.fillStyle='#593E31'; cc.fillRect(22,8,5,4); cc.fillRect(24,4,4,6); cc.fillStyle='#7a7e84'; cc.fillRect(25,9,2,6); }));
+    const M={hair:'#3F2452',robe:'#2B1B38',rune:'#B948C2',eye:'#E268F0',shoes:'#1E1427'};
+    const mbody=(c,f)=>{ c.fillStyle=M.hair; c.fillRect(9,2,14,7); c.fillRect(8,5,4,3); c.fillRect(21,5,4,3);
+      c.fillStyle=M.robe; c.fillRect(8,8,16,12); c.fillStyle=M.eye; c.fillRect(13,9,2,2); c.fillRect(18,9,2,2);
+      c.fillStyle=M.robe; c.fillRect(7,19,18,8); c.fillStyle=M.rune; c.fillRect(9,21,2,2); c.fillRect(21,21,2,2); c.fillRect(14,24,4,2);
+      f(c); c.fillStyle=M.shoes; c.fillRect(10,27,5,4); c.fillRect(17,27,5,4); };
+    this.r.sprite('hero_mage_idle',32,32,c=>mbody(c,()=>{}));
+    this.r.sprite('hero_mage_walk1',32,32,c=>mbody(c,()=>{}));
+    this.r.sprite('hero_mage_walk2',32,32,c=>mbody(c,()=>{}));
+    this.r.sprite('hero_mage_attack',32,32,c=>mbody(c,cc=>{ cc.fillStyle=M.robe; cc.fillRect(22,8,6,7); cc.fillStyle=M.rune; cc.fillRect(25,10,3,3); }));
+    this.r.sprite('silhouette_ranger',32,32,c=>{ c.fillStyle='#3a3f55'; c.fillRect(9,3,14,6); c.fillRect(10,9,12,5); c.fillRect(9,14,14,9); c.fillRect(11,23,4,5); c.fillRect(17,23,4,5); });
+    this.r.sprite('silhouette_guardian',36,36,c=>{ c.fillStyle='#3a3f55'; c.fillRect(8,4,20,8); c.fillRect(7,12,22,12); c.fillRect(12,24,6,6); c.fillRect(19,24,6,6); });
+    this.r.sprite('silhouette_mage',32,32,c=>{ c.fillStyle='#3a3f55'; c.fillRect(9,2,14,8); c.fillRect(8,10,16,14); c.fillRect(10,24,4,4); c.fillRect(18,24,4,4); });
+  }
+  makeMonsters(){
+    this.r.sprite('mon_basic',20,20,c=>{ c.fillStyle='#582470'; c.fillRect(3,4,14,12); c.fillStyle='#fff'; c.fillRect(6,7,2,2); c.fillRect(12,7,2,2); c.fillStyle='#3c1550'; c.fillRect(4,16,2,2); c.fillRect(9,16,2,2); c.fillRect(14,16,2,2); });
+    this.r.sprite('mon_fast',16,16,c=>{ c.fillStyle='#7B3899'; c.globalAlpha=.85; c.fillRect(4,3,8,8); c.fillRect(2,8,12,5); c.fillStyle='#fff'; c.fillRect(5,5,2,2); c.fillRect(9,5,2,2); c.globalAlpha=1; });
+    this.r.sprite('mon_heavy',40,40,c=>{ c.fillStyle='#4E4844'; c.fillRect(6,6,28,26); c.fillStyle='#6a625c'; c.fillRect(10,10,8,6); c.fillRect(24,10,6,6); c.fillStyle='#ff7a59'; c.fillRect(13,18,4,3); c.fillRect(23,18,4,3); c.fillStyle='#333'; c.fillRect(8,32,24,4); });
+    this.r.sprite('mon_archer',24,24,c=>{ c.fillStyle='#662E80'; c.fillRect(6,4,12,14); c.fillStyle='#fff'; c.fillRect(8,7,2,2); c.fillRect(14,7,2,2); c.fillStyle='#8a3fa8'; c.fillRect(7,20,10,3); c.fillStyle='#B948C2'; c.fillRect(18,8,3,8); });
+    this.r.sprite('mon_mutated',20,20,c=>{ c.fillStyle='#582470'; c.fillRect(3,4,14,12); c.fillStyle='#fff'; c.fillRect(6,7,2,2); c.fillRect(12,7,2,2); c.fillStyle='#992B2B'; c.fillRect(4,9,2,6); c.fillRect(14,9,2,6); c.fillRect(8,13,4,2); c.fillStyle='#3c1550'; c.fillRect(4,16,2,2); c.fillRect(14,16,2,2); });
+    // 通用 BOSS 基底（后续按区域着色）
+    this.r.sprite('mon_boss_base',72,72,c=>{ c.fillStyle='#2A0E38'; c.fillRect(8,10,56,52); c.fillRect(16,4,40,10); c.fillRect(4,20,10,30); c.fillRect(58,20,10,30);
+      c.fillStyle='#FF3B3B'; c.fillRect(12,22,6,6); c.fillRect(54,22,6,6); c.fillRect(30,26,12,10); c.fillRect(40,42,8,8); c.fillRect(20,46,8,8); c.fillRect(46,50,8,6);
+      c.fillStyle='#3d1a52'; c.fillRect(12,58,48,10); c.fillStyle='#FF3B3B'; c.fillRect(24,58,4,4); c.fillRect(44,58,4,4); });
+  }
+  makeWeapons(){
+    this.r.sprite('w_crossbow',22,22,c=>{ c.fillStyle='#8D6E63'; c.fillRect(2,8,8,6); c.fillStyle='#5D4037'; c.fillRect(8,5,4,12); c.fillStyle='#FFD740'; c.fillRect(12,9,6,3); c.fillStyle='#fff'; c.fillRect(16,6,2,2); c.fillRect(16,12,2,2); });
+    this.r.sprite('w_frost',22,22,c=>{ c.fillStyle='#5D4037'; c.fillRect(8,10,8,8); c.fillStyle='#6EC6FF'; c.fillRect(4,2,6,12); c.fillRect(9,0,3,8); c.fillRect(2,6,5,4); c.fillStyle='#E1F5FE'; c.fillRect(5,3,3,6); });
+    this.r.sprite('w_hammer',24,24,c=>{ c.fillStyle='#6D4C41'; c.fillRect(10,14,5,9); c.fillStyle='#90A4AE'; c.fillRect(4,2,18,9); c.fillStyle='#CFD8DC'; c.fillRect(6,4,5,5); c.fillRect(14,4,5,5); });
+    this.r.sprite('w_storm',22,22,c=>{ c.fillStyle='#263238'; c.fillRect(8,4,7,12); c.fillStyle='#FFE082'; c.fillRect(10,2,3,16); c.fillStyle='#FFF59D'; c.fillRect(7,6,9,2); c.fillRect(9,10,5,2); });
+    this.r.sprite('w_flame',22,22,c=>{ c.fillStyle='#B8432F'; c.fillRect(9,8,6,10); c.fillStyle='#FF7043'; c.fillRect(5,4,5,6); c.fillRect(12,3,5,7); c.fillStyle='#FFD54F'; c.fillRect(7,6,3,3); c.fillRect(13,5,3,3); });
+  }
+}
+
+// ============================================================
+// 粒子系统（三档画质 + 天气 + 伤害数字 + 闪电）
+// ============================================================
+class ParticleSystem {
+  constructor(r, quality){ this.r=r; this.list=[]; this.pool=[]; this.setQuality(quality); this.weather=[]; }
+  setQuality(q){ this.mult = CONFIG.QUALITY[q] || 1; this.q = q; }
+  count(cfg){ if(this.q==='HIGH') return cfg.high; if(this.q==='MEDIUM') return cfg.med; return cfg.low; }
+  spawn(x,y,cfg,vx,vy){ const n=this.count(cfg); for(let i=0;i<n;i++){
+    let p=this.pool.pop(); if(!p) p={x:0,y:0,vx:0,vy:0,c:'#fff',life:0,max:1,s:2};
+    const ang=Math.random()*Math.PI*2, sp=(vx!==undefined)?Utils.rnd(vx*0.6,vx):Utils.rnd(10,cfg.speed);
+    p.x=x; p.y=y; p.vx=(vx!==undefined)?Utils.rnd(-vx,vx):Math.cos(ang)*sp; p.vy=(vy!==undefined)?Utils.rnd(-vy,vy):Math.sin(ang)*sp;
+    p.c=Utils.pick(cfg.colors); p.max=cfg.life*(0.7+Math.random()*0.6); p.life=p.max; p.s=(Math.random()<0.3?3:2); this.list.push(p); } }
+  ring(x,y,color){ const p=this.pool.pop()||{type:'ring',x:0,y:0,rad:4,max:1,life:1}; p.type='ring'; p.x=x; p.y=y; p.rad=6; p.c=color; p.max=CONFIG.PARTICLES.shield.life; p.life=p.max; this.list.push(p); }
+  // 伤害数字
+  dmg(x,y,val,color,crit){ const p={type:'dmg',x:x,y:y,vy:-46,life:0.9,max:0.9,txt:(crit?'暴击 ':'')+Math.round(val),c:color||'#fff',s:crit?18:13}; this.list.push(p); }
+  // 闪电链
+  bolt(x1,y1,x2,y2,color){ this.list.push({type:'bolt',x1,y1,x2,y2,c:color||'#FFE082',life:0.14,max:0.14}); }
+  // 天气粒子（按区域主题）
+  weatherSpawn(theme){
+    const n=this.q==='HIGH'?3:(this.q==='MEDIUM'?2:1);
+    for(let i=0;i<n;i++){
+      let p={x:Utils.rnd(0,this.r.W), y:Utils.rnd(0,this.r.H), vx:0,vy:0,life:1,max:1,s:2,c:'#fff',theme:theme};
+      const W=this.r.W,H=this.r.H;
+      if(theme==='leaf'){ p.c='#7CB342'; p.x=Utils.rnd(0,W); p.y=Utils.rnd(-20,H); p.vx=Utils.rnd(-14,14); p.vy=Utils.rnd(30,60); p.s=3; }
+      else if(theme==='sand'){ p.c='#E4C87E'; p.x=Utils.rnd(0,W); p.y=Utils.rnd(0,H); p.vx=Utils.rnd(-120,-40); p.vy=Utils.rnd(-8,8); p.s=2; p.life=0.6; }
+      else if(theme==='snow'){ p.c='#FFFFFF'; p.x=Utils.rnd(0,W); p.y=Utils.rnd(-20,H); p.vx=Utils.rnd(-8,8); p.vy=Utils.rnd(40,80); p.s=2; }
+      else if(theme==='ember'){ p.c=Utils.pick(['#FF8A50','#FFC107','#FF5722']); p.x=Utils.rnd(0,W); p.y=Utils.rnd(H/2,H+20); p.vx=Utils.rnd(-12,12); p.vy=Utils.rnd(-70,-30); p.s=2; }
+      else if(theme==='fog'){ p.c='rgba(200,220,180,0.5)'; p.x=Utils.rnd(0,W); p.y=Utils.rnd(0,H); p.vx=Utils.rnd(10,30); p.vy=0; p.s=Utils.rnd(8,22); p.life=1; }
+      else if(theme==='void'){ p.c=Utils.pick(['#B948C2','#7B3899','#E040FB']); p.x=Utils.rnd(0,W); p.y=Utils.rnd(-20,H); p.vx=Utils.rnd(-6,6); p.vy=Utils.rnd(12,30); p.s=2; }
+      this.weather.push(p);
+    }
+  }
+  updateWeather(dt){
+    for(let i=this.weather.length-1;i>=0;i--){ const p=this.weather[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt;
+      const W=this.r.W,H=this.r.H;
+      if(p.theme==='ember'){ if(p.y<0){ p.y=H; p.x=Utils.rnd(0,W);} }
+      else if(p.y>H+24 || p.y<-30 || p.x<-30 || p.x>W+30) this.weather.splice(i,1);
+      else if(p.life<=0) this.weather.splice(i,1);
+    }
+    const cap=this.q==='HIGH'?70:(this.q==='MEDIUM'?36:16);
+    if(this.weather.length<cap){ const theme=this._weatherTheme; if(theme) this.weatherSpawn(theme); }
+  }
+  setWeather(theme){ this._weatherTheme=theme; this.weather=[]; for(let i=0;i<20;i++) this.weatherSpawn(theme); }
+  update(dt){ for(let i=this.list.length-1;i>=0;i--){ const p=this.list[i]; p.life-=dt;
+    if(p.type==='dmg'){ p.y+=p.vy*dt; p.vy*=0.92; }
+    else if(p.type==='bolt'){ /* 静态 */ }
+    else if(p.type!=='ring'){ p.x+=p.vx*dt; p.y+=p.vy*dt; }
+    if(p.life<=0){ this.pool.push(p); this.list.splice(i,1); } } }
+  render(){ const c=this.r.ctx;
+    for(const p of this.list){
+      const a=Utils.clamp(p.life/p.max,0,1);
+      if(p.type==='ring'){ c.strokeStyle=Utils.pick([p.c]); c.globalAlpha=a; c.lineWidth=3; c.beginPath(); c.arc(p.x,p.y,p.rad+(1-a)*26,0,7); c.stroke(); c.globalAlpha=1; }
+      else if(p.type==='dmg'){ c.globalAlpha=a; c.fillStyle=p.c; c.font=p.s+'px "Courier New",monospace'; c.textAlign='center'; c.fillText(p.txt,p.x,p.y); c.globalAlpha=1; c.textAlign='left'; }
+      else if(p.type==='bolt'){ c.globalAlpha=a; c.strokeStyle=p.c; c.lineWidth=3; c.beginPath(); c.moveTo(p.x1,p.y1);
+        const mx=(p.x1+p.x2)/2+Utils.rnd(-20,20), my=(p.y1+p.y2)/2+Utils.rnd(-20,20);
+        c.lineTo(mx,my); c.lineTo(p.x2,p.y2); c.stroke(); c.globalAlpha=1; }
+      else { c.fillStyle=p.c; c.globalAlpha=a; c.fillRect(Math.floor(p.x),Math.floor(p.y),p.s,p.s); c.globalAlpha=1; } } }
+  renderWeather(){ const c=this.r.ctx; for(const p of this.weather){
+    if(p.theme==='fog'){ c.fillStyle=p.c; c.globalAlpha=0.18; c.fillRect(p.x,p.y,p.s,p.s*0.5); c.globalAlpha=1; }
+    else { c.globalAlpha=Utils.clamp(p.life,0.3,1); c.fillStyle=p.c; c.fillRect(Math.floor(p.x),Math.floor(p.y),p.s,p.s); c.globalAlpha=1; } } }
+}
+"use strict";
+// ============================================================
+// 实体（玩家 / 怪物 / 投射物 / 拾取物 / 场景物件）
+// ============================================================
+class Player {
+  constructor(heroId, weaponKey){
+    const H=HEROES[heroId]; const W=WEAPONS[weaponKey]||WEAPONS.crossbow;
+    this.heroId=heroId; this.w=H.w; this.h=H.h; this.colW=H.colW; this.colH=H.colH;
+    this.x=CONFIG.WORLD_W/2; this.y=CONFIG.WORLD_H/2;
+    this.speed=H.speed; this.maxHp=H.hp; this.hp=H.hp;
+    this.weaponKey=weaponKey;
+    this.rate=1/(W.rate||H.fireRate);
+    this.projSpeed=(W.speed||H.projSpeed);
+    this.pickup=H.pickup; this.crit=0.05; this.multishot=0; this.pierce=0; this.healOnKill=0;
+    this.thorn=0; this.explode=0; this.vampire=0; this.shield=0; this.expMult=1;
+    this.level=1; this.exp=0; this.state='idle'; this.frame=0; this.frameT=0; this.dir=1;
+    this.invincible=0; this.attackT=0; this.moving=false; this.alive=true; this.attackAnimT=0;
+  }
+  getBox(){ return {x:this.x+ (this.w-this.colW)/2, y:this.y+ (this.h-this.colH)/2, w:this.colW, h:this.colH}; }
+  expNeed(){ return Math.floor(80+ (this.level-1)*32); }
+  addExp(n){ this.exp+=n; }
+  update(dt, input){
+    if(!this.alive) return;
+    let dx=0,dy=0;
+    if(input.left) dx-=1; if(input.right) dx+=1; if(input.up) dy-=1; if(input.down) dy+=1;
+    this.moving = (dx||dy)!==0;
+    if(this.moving){ const l=Math.sqrt(dx*dx+dy*dy); dx/=l; dy/=l;
+      this.x=Utils.clamp(this.x+dx*this.speed*dt, 12, CONFIG.WORLD_W-12);
+      this.y=Utils.clamp(this.y+dy*this.speed*dt, 12, CONFIG.WORLD_H-12);
+      if(dx) this.dir = dx>0?1:-1; this.state='walk'; }
+    else this.state='idle';
+    if(this.invincible>0) this.invincible-=dt;
+    this.attackT-=dt;
+    if(this.attackAnimT>0) this.attackAnimT-=dt;
+    const fps=CONFIG.ANIM[this.state==='walk'?'walk':'idle'];
+    this.frameT+=dt; if(this.frameT>=1/fps){ this.frameT=0; this.frame=(this.frame+1)%2; }
+  }
+  hurt(dmg, game){
+    if(this.invincible>0 || !this.alive) return;
+    if(game.up.shield && game.shieldActive){ game.shieldActive=false; game.shieldTimer=45; game.particles.ring(this.x+this.w/2,this.y+this.h/2,'#80D8FF'); game.toast('屏障抵挡'); return; }
+    this.hp-=dmg; this.invincible=CONFIG.INVINCIBLE; game.audio.sfx('hurt'); game.r.flash=1; game.r.shake=Math.max(game.r.shake,3);
+    if(game.up.thorn){ for(const m of game.monsters){ if(Utils.dist(m.x+m.w/2,m.y+m.h/2,this.x+this.w/2,this.y+this.h/2)<46){ m.hp-=10*(game.up.thorn); if(m.hp<=0) game.killMonster(m); } } }
+    if(this.hp<=0){ this.hp=0; this.alive=false; game.onPlayerDeath(); }
+  }
+}
+
+// 怪物（支持区域着色 / 减速 / 灼烧 / 视野索敌）
+class Monster {
+  constructor(type,x,y,scale,regionTint){
+    const T=MONSTERS[type]; this.type=type; this.x=x; this.y=y;
+    this.w=T.w*scale; this.h=T.h*scale; this.speed=T.speed*(0.9+Utils.rnd(0,0.2));
+    this.hp=T.hp*scale; this.maxHp=this.hp; this.dmg=T.dmg; this.scale=scale;
+    // 视野范围：玩家进入视野才追击；视野外缓慢游荡，不全局追人
+    this.vision=this.visionOf(type);
+    this.attackT=0; this.isBoss=(type==='boss'); this.bossId=0; this.enraged=false; this.frameT=0; this.frame=0;
+    this.alpha=(type==='fast')?0.85:1; this.tint=regionTint||null;
+    this.slow=0; this.burn=0; this.burnT=0; this.hitFlash=0;
+    // 游荡：视野外随机漂移
+    this.wanderT=Utils.rnd(0.5,2); this.wvx=0; this.wvy=0; this.slowMove=Utils.rnd(14,26);
+  }
+  visionOf(type){ return { basic:760, fast:800, heavy:700, archer:780, mutated:760, boss:940 }[type]||760; }
+  getBox(){ return {x:this.x+ this.w*0.15, y:this.y+ this.h*0.15, w:this.w*0.7, h:this.h*0.7}; }
+  applyStatus(dt){
+    if(this.slow>0){ this.slow-=dt; }
+    if(this.burn>0){ this.burnT-=dt; if(this.burnT<=0){ this.burnT=0.5; this.hp-=this.burn; } }
+    if(this.hitFlash>0) this.hitFlash-=dt;
+  }
+  update(dt, p, game){
+    if(this.isBoss){ this.updateBoss(dt,p,game); return; }
+    this.applyStatus(dt);
+    const b=this.getBox(), pb=p.getBox();
+    const cx=this.x+this.w/2, cy=this.y+this.h/2, pcx=p.x+p.w/2, pcy=p.y+p.h/2;
+    const d=Utils.dist(cx,cy,pcx,pcy)||1;
+    // 视野索敌：玩家进入视野才追击；视野外原地/缓慢游荡
+    let sp=this.speed*(this.slow>0?0.45:1); if(game.hiding && d<140) sp*=0.4;
+    if(d<this.vision){
+      this.x+=(pcx-cx)/d*sp*dt; this.y+=(pcy-cy)/d*sp*dt;
+    } else {
+      this.wanderT-=dt;
+      if(this.wanderT<=0){ this.wanderT=Utils.rnd(1.2,3); const a=Utils.rnd(0,Math.PI*2); this.wvx=Math.cos(a)*this.slowMove; this.wvy=Math.sin(a)*this.slowMove; }
+      this.x=Utils.clamp(this.x+this.wvx*dt,0,CONFIG.WORLD_W); this.y=Utils.clamp(this.y+this.wvy*dt,0,CONFIG.WORLD_H);
+    }
+    if(Utils.rr(b,pb)){ p.hurt(this.dmg,game); }
+    if(this.type==='archer'){ this.attackT-=dt;
+      if(this.attackT<=0 && d<420){ this.attackT=2.2; game.shootMonster(this.x+this.w/2,this.y+this.h/2,pcx,pcy,this.dmg*0.6); } }
+    this.frameT+=dt; if(this.frameT>=0.3){ this.frameT=0; this.frame=this.frame?0:1; }
+  }
+  updateBoss(dt,p,game){
+    this.applyStatus(dt);
+    const cx=this.x+this.w/2, cy=this.y+this.h/2, pcx=p.x+p.w/2, pcy=p.y+p.h/2;
+    if(!this.enraged && this.hp<this.maxHp*0.35){ this.enraged=true; game.toast('BOSS 狂暴！'); game.r.shake=8; game.audio.sfx('boss'); }
+    const sp=(this.enraged?48:28)*(this.slow>0?0.5:1);
+    const d=Utils.dist(cx,cy,pcx,pcy)||1;
+    // BOSS 恒追击玩家（无视视野）；被甩开太远时直接拉回玩家附近，避免永远追不上
+    if(d>1500){ this.x=pcx+Utils.rnd(-520,520); this.y=pcy+Utils.rnd(-420,420); game.particles.ring(this.x+this.w/2,this.y+this.h/2,'#FF5252'); }
+    else if(d>150){ this.x+=(pcx-cx)/d*sp*dt; this.y+=(pcy-cy)/d*sp*dt; }
+    this.attackT-=dt;
+    if(this.attackT<=0){
+      this.attackT = this.enraged?1.9:3.0;
+      const mode=Math.floor(Math.random()*3);
+      if(mode===0){ // 砸地 AoE
+        game.r.shake=12; game.particles.ring(cx,cy,'#FF5252');
+        const r= this.enraged?190:140;
+        if(Utils.dist(p.x+p.w/2,p.y+p.h/2,cx,cy)<r) p.hurt((this.enraged?28:20),game);
+      } else if(mode===1){ // 弹幕
+        const n= this.enraged?12:8;
+        for(let i=0;i<n;i++){ const a=i/n*Math.PI*2; game.shootMonster(cx,cy,cx+Math.cos(a)*300,cy+Math.sin(a)*300,12); }
+      } else { // 冲锋
+        game.r.shake=8; const spd=this.enraged?420:320; const a=Math.atan2(pcy-cy,pcx-cx);
+        game.projs.push(new Projectile(cx,cy,Math.cos(a)*spd,Math.sin(a)*spd,this.enraged?26:18,{enemy:true,s:9,color:'#FF5252',life:1.0}));
+      }
+    }
+    if(Utils.rr(this.getBox(),p.getBox())) p.hurt(25,game);
+    this.frameT+=dt; if(this.frameT>=0.4){ this.frameT=0; this.frame=(this.frame+1)%3; }
+  }
+}
+
+// 投射物（带武器类型）
+class Projectile {
+  constructor(x,y,dx,dy,dmg,opt){ this.x=x; this.y=y; this.vx=dx; this.vy=dy; this.dmg=dmg;
+    this.pierce=opt.pierce||0; this.isEnemy=opt.enemy||false; this.s=opt.s||6; this.life=opt.life||1.4; this.ring=opt.ring||false;
+    this.wtype=opt.wtype||(opt.enemy?'enemy':'pierce'); this.color=opt.color||(opt.enemy?'#B948C2':'#FFD740');
+    this.trail=[]; this.slowT=opt.slowT||0; this.burnT=opt.burnT||0; this.chain=opt.chain||0; }
+  update(dt){ this.x+=this.vx*dt; this.y+=this.vy*dt; this.life-=dt;
+    this.trail.unshift({x:this.x,y:this.y}); if(this.trail.length>5) this.trail.pop(); }
+}
+
+// 拾取物
+class Pickup {
+  constructor(type,x,y,val){ this.type=type; this.x=x; this.y=y; this.val=val; this.t=0;
+    this.vx=Utils.rnd(-30,30); this.vy=Utils.rnd(-30,30); }
+}
+
+// 场景物件（含属性/作用元数据）
+const OBJECT_META = {
+  crate:   { name:'木箱',   kind:'可破坏障碍物', desc:'击碎后掉落秘境币或经验，探索寻宝必备。' },
+  pot:     { name:'陶罐',   kind:'可破坏障碍物', desc:'击碎后有概率掉落治疗药水、金币或大量经验。' },
+  rock:    { name:'岩石',   kind:'阻挡障碍物',   desc:'阻挡移动并抵挡投射物，可用来卡位与躲避。' },
+  grass:   { name:'草丛',   kind:'隐藏地形',     desc:'站入草丛可降低怪物追踪速度，便于迂回。' },
+  crystal: { name:'秘境结晶', kind:'可破坏宝物',   desc:'蕴含秘境能量的结晶，击碎获得大量经验。' }
+};
+class WorldObject {
+  constructor(type,x,y){ this.type=type; this.x=x; this.y=y;
+    this.hp=(type==='crate'||type==='crystal')?2:1; this.cd=0; this.alive=true; this.glow=Math.random()*6; }
+  getBox(){ const s={crate:[16,16],pot:[14,18],rock:[24,20],grass:[16,12],crystal:[16,22]}[this.type]; return {x:this.x,y:this.y,w:s[0],h:s[1]}; }
+}
+"use strict";
+// ============================================================
+// 剧情动画播放器 V4：快速吸睛 + 每幕点击推进
+// ============================================================
+class StoryPlayer {
+  constructor(r,audio,onDone,showSkip){ this.r=r; this.audio=audio; this.onDone=onDone; this.showSkip=!!showSkip;
+    this.skipBtn=document.getElementById('skip-btn'); this.subEl=document.getElementById('subtitle-layer'); this.nextBtn=document.getElementById('story-next-btn');
+    this.idx=0; this.t=0; this.sceneT=0; this.playing=false; this.done=false;
+    this.subText=''; this.subShow=''; this.subT=0; this.voiceKey='';
+    this.white=0; this.cam={x:0,y:0,scale:1,alpha:1};
+    this.scenes=this.buildScenes();
+    this.skipBtn.onclick=()=>this.finish(true);
+    this.nextBtn.onclick=()=>this.next();
+  }
+  buildScenes(){
+    return [
+      {sub:'虚空裂隙，撕裂了天空', voice:'s1', minDur:2.2, maxDur:6, draw:t=>this.sceneRift(t)},
+      {sub:'次元彼端，是一片被遗忘的土地', voice:'s2', minDur:2.4, maxDur:6, draw:t=>this.sceneRiftClose(t)},
+      {sub:'人们叫它 —— 像素秘境', voice:'s3', minDur:2.2, maxDur:5, draw:t=>this.s1(t)},
+      {sub:'这里曾是冒险者的乐土，人人都能找到属于自己的冒险', voice:'s4', minDur:3.2, maxDur:7, draw:t=>this.s1b(t)},
+      {sub:'没有人知道，虚空的侵蚀早已悄然开始', voice:'s5', minDur:2.6, maxDur:6, draw:t=>this.s1c(t)},
+      {sub:'直到那一天，裂隙彻底张开，魔物倾泻而出', voice:'s6', minDur:2.6, maxDur:6, draw:t=>this.sceneSwarm(t)},
+      {sub:'战斗爆发了，可魔物永无止境', voice:'s7', minDur:2.6, maxDur:6, draw:t=>this.s2c(t)},
+      {sub:'倒下的冒险者化作灵魂碎片，带着秘境能量归来', voice:'s8', minDur:3.0, maxDur:7, draw:t=>this.s3(t)},
+      {sub:'每一次倒下都不是终点，秘境币将成为你冒险的力量', voice:'s9', minDur:3.0, maxDur:7, draw:t=>this.s3b(t)},
+      {sub:'探索六大区域，净化被侵蚀的秘境 —— 现在，轮到你出发了！', voice:'s10', minDur:3.4, maxDur:8, draw:t=>this.s4(t)},
+      {sub:'', voice:null, minDur:0.6, maxDur:0.6, draw:t=>this.logo(t)}
+    ];
+  }
+  start(){ this.playing=true; this.idx=0; this.t=0; this.sceneT=0;
+    // 首次观看不显示跳过；后续重看才显示
+    this.skipBtn.style.display=this.showSkip?'block':'none';
+    this.subEl.style.display='block'; this.nextBtn.style.display='block';
+    this.audio.bgm('story'); this.enterScene(); this.loop(); }
+  enterScene(){ const sc=this.scenes[this.idx]; this.sceneT=0; this.subText=''; this.subShow=''; this.subT=0;
+    if(sc.voice && sc.voice!==this.voiceKey){ this.voiceKey=sc.voice; this.audio.voice(sc.voice); }
+    if(!sc.sub){ this.subEl.textContent=''; } }
+  loop(){ if(!this.playing) return; const now=performance.now(); this.t+=0.016; this.sceneT+=0.016;
+    const sc=this.scenes[this.idx];
+    if(this.sceneT>=sc.maxDur){ this.next(); }
+    else { this.update(sc); this.render(sc); }
+    requestAnimationFrame(()=>this.loop()); }
+  next(){ if(!this.playing||this.done) return;
+    const sc=this.scenes[this.idx];
+    if(this.sceneT<sc.minDur) return; // 未达最短停留，忽略点击
+    this.white=0.6;
+    if(this.idx>=this.scenes.length-1){ this.finish(false); return; }
+    this.idx++; this.enterScene(); }
+  update(sc){
+    const k=0.05; this.cam.scale+=(sc.camScale||1 - this.cam.scale)*k;
+    if(this.white>0) this.white=Math.max(0,this.white-0.05);
+    if(sc.sub!==this.subText){ this.subText=sc.sub; this.subShow=''; this.subT=0; if(!sc.sub) this.subEl.textContent=''; }
+    if(this.subShow.length<this.subText.length){ this.subT+=16;
+      if(this.subT>=CONFIG.SUBTITLE_MS){ this.subT=0; this.subShow=this.subText.slice(0,this.subShow.length+1); this.subEl.textContent=this.subShow; } }
+  }
+  render(sc){ const r=this.r; r.clear(); r.cam.x=0; r.cam.y=0; r.cam.alpha=1;
+    r.camPush(); sc.draw(this.sceneT); r.camPop();
+    if(this.white>0){ r.ctx.globalAlpha=this.white; r.ctx.fillStyle='#fff'; r.ctx.fillRect(0,0,r.W,r.H); r.ctx.globalAlpha=1; }
+    const last=this.idx>=this.scenes.length-1;
+    this.nextBtn.textContent = last? '点击开始冒险 ▶' : '点击进入下一幕 ▶';
+    if(last){ this.subEl.style.display='none'; } }
+  finish(skipped){ if(this.done) return; this.done=true; this.playing=false; this.skipBtn.style.display='none'; this.subEl.style.display='none'; this.nextBtn.style.display='none';
+    this.audio.stopVoice(); this.audio.stopBgm();
+    Utils.storage.set(CONFIG.STORAGE.WATCHED,true);
+    if(this.onDone) this.onDone(); }
+
+  // ---------- 场景绘制（每幕画面丰富化：风景/人物/环境对象） ----------
+  stars(n,seed){ const r=this.r.ctx; for(let i=0;i<n;i++){ const x=(i*97+seed*13)%CONFIG.W, y=(i*61+seed*7)%CONFIG.H;
+    r.fillStyle=`rgba(${150+ (i%100)},${80+(i%60)},${200+(i%55)},${0.4+Math.random()*0.5})`; r.fillRect(x,y,2,2); } }
+  mountains(){ const c=this.r.ctx; c.fillStyle='#2E3A45'; for(let i=0;i<9;i++){ const bx=i*170, by=CONFIG.H/2+10;
+    c.beginPath(); c.moveTo(bx,by+60); c.lineTo(bx+85,by-70); c.lineTo(bx+170,by+60); c.closePath(); c.fill(); }
+    c.fillStyle='#E8F6FF'; c.fillRect(150,100,34,34); c.fillRect(420,60,26,26); c.fillRect(880,90,30,30); }
+  clouds(count,off){ const c=this.r.ctx; for(let i=0;i<count;i++){ const x=((i*317+off*23+this.t*8)%(CONFIG.W+160))-80, y=(i*89+off*37)%(CONFIG.H/2-70);
+    c.fillStyle='rgba(255,255,255,0.85)'; c.fillRect(x,y,80,22); c.fillRect(x+20,y-12,52,16); c.fillRect(x+46,y+10,40,12); } }
+  birds(){ const c=this.r.ctx; c.strokeStyle='#222'; c.lineWidth=2;
+    for(let i=0;i<5;i++){ const bx=((i*260+this.t*30)%CONFIG.W), by=(60+i*30)%(CONFIG.H/2-30); c.beginPath(); c.arc(bx,by,5,0,7); c.arc(bx+10,by-4,5,0,7); c.stroke(); } }
+  flowers(fx,fy){ const c=this.r.ctx; const cols=['#E91E63','#FFEB3B','#FF7043','#CE93D8','#FF5252'];
+    for(let i=0;i<fx.length;i++){ c.fillStyle=cols[i%cols.length]; c.fillRect(fx[i],fy[i],4,4); c.fillStyle='#2E7D32'; c.fillRect(fx[i]+1,fy[i]+3,2,6); } }
+  trees(tx,ty){ const c=this.r.ctx; for(let i=0;i<tx.length;i++){
+    c.fillStyle='#5D4037'; c.fillRect(tx[i],ty[i],12,26); c.fillStyle='#2E7D32'; c.fillRect(tx[i]-12,ty[i]-10,36,18); c.fillStyle='#43A047'; c.fillRect(tx[i]-6,ty[i]-16,24,12); } }
+  forestGround(){ const c=this.r.ctx; const tilt=this.r.cache.get('tile_forest');
+    for(let y=CONFIG.H/2;y<CONFIG.H;y+=16)for(let x=0;x<CONFIG.W;x+=16)c.drawImage(tilt,x,y);
+    c.fillStyle='#388E3C'; c.fillRect(0,CONFIG.H-14,CONFIG.W,14); }
+  // 幕1：虚空裂隙撕裂天空（冲击波 + 速度线 + 崩碎浮岩 + 废墟剪影）
+  sceneRift(t){ const c=this.r.ctx; c.fillStyle='#0a0512'; c.fillRect(0,0,CONFIG.W,CONFIG.H); this.stars(120,1);
+    const p=Math.min(1,t/1.6); const hw=6+p*70; c.fillStyle='#4A148C'; c.fillRect(CONFIG.W/2-hw,0,hw*2,CONFIG.H);
+    c.fillStyle='#9C27B0'; c.fillRect(CONFIG.W/2-hw*0.45,0,hw*0.9,CONFIG.H);
+    c.fillStyle='#E040FB'; for(let i=0;i<26;i++){ const y=(i*83)%CONFIG.H; c.fillRect(CONFIG.W/2-hw+((i%5)-2)*7,y,3,3); }
+    // 裂隙内流出的能量光带
+    c.globalAlpha=0.6+0.4*Math.sin(t*6); c.fillStyle='#E1BEE7'; c.fillRect(CONFIG.W/2-hw*0.1,0,hw*0.2,CONFIG.H); c.globalAlpha=1;
+    // 冲击波环
+    c.strokeStyle='rgba(224,64,251,0.8)'; c.lineWidth=4; c.beginPath(); c.arc(CONFIG.W/2,CONFIG.H/2,p*560,0,7); c.stroke();
+    c.strokeStyle='rgba(224,64,251,0.4)'; c.lineWidth=8; c.beginPath(); c.arc(CONFIG.W/2,CONFIG.H/2,p*360,0,7); c.stroke();
+    // 速度线
+    c.strokeStyle='rgba(255,255,255,0.25)'; c.lineWidth=2;
+    for(let i=0;i<16;i++){ const y=(i*61)%CONFIG.H; const sx=t*900%CONFIG.W; c.beginPath(); c.moveTo(sx,y); c.lineTo(sx-70,y); c.stroke(); }
+    // 崩碎浮岩
+    for(let i=0;i<7;i++){ const rx=(i*211+t*14)%CONFIG.W, ry=(i*97+Math.sin(t*3+i)*30)%CONFIG.H;
+      c.fillStyle='#3E2723'; c.fillRect(rx,ry,26,18); c.fillStyle='#5D4037'; c.fillRect(rx+4,ry-4,14,10); }
+    // 地面废墟剪影
+    c.fillStyle='#12061f'; c.fillRect(0,CONFIG.H-90,CONFIG.W,90);
+    c.fillStyle='#0d0415'; for(let i=0;i<12;i++){ const bx=i*130; c.fillRect(bx,CONFIG.H-90,40,70); c.fillRect(bx+14,CONFIG.H-120,12,34); }
+    // 紫雾
+    c.fillStyle='rgba(74,20,140,0.18)'; c.fillRect(0,0,CONFIG.W,CONFIG.H); }
+  // 幕2：次元彼端——裂隙近景与光流
+  sceneRiftClose(t){ const c=this.r.ctx; c.fillStyle='#12061f'; c.fillRect(0,0,CONFIG.W,CONFIG.H); this.stars(90,2);
+    const p=Math.min(1,t/1.4); const cx=CONFIG.W/2, cy=CONFIG.H/2;
+    c.fillStyle='#4A148C'; c.fillRect(cx-90,0,180,CONFIG.H); c.fillStyle='#9C27B0'; c.fillRect(cx-40,0,80,CONFIG.H);
+    c.fillStyle='#E040FB'; for(let i=0;i<28;i++){ const y=(i*73)%CONFIG.H; c.fillRect(cx-90+((i%5)-2)*7,y,3,3); }
+    // 裂隙内涌出的光（脉动）
+    c.globalAlpha=p; c.fillStyle='#E1BEE7'; c.fillRect(cx-16,0,32,CONFIG.H); c.globalAlpha=1;
+    c.fillStyle='#E040FB'; c.globalAlpha=0.5+0.5*Math.sin(t*8); c.fillRect(cx-24,0,5,CONFIG.H); c.fillRect(cx+19,0,5,CONFIG.H); c.globalAlpha=1;
+    // 涌出的星光
+    for(let i=0;i<40;i++){ const gy=(CONFIG.H-((t*120+i*23)%CONFIG.H)); c.globalAlpha=0.4+0.6*((i%3)/3);
+      c.fillStyle='#FFF9C4'; c.fillRect(cx-8+((i%5)*4),gy,2,2); c.globalAlpha=1; }
+    // 漂浮残片
+    for(let i=0;i<8;i++){ const fx=cx+180+((i*137)%420), fy=(i*97+Math.sin(t*2+i)*24)%CONFIG.H;
+      c.fillStyle='#5D4037'; c.fillRect(fx,fy,14,9); c.fillStyle='#8D6E63'; c.fillRect(fx+3,fy-3,8,6); }
+    c.fillStyle='rgba(255,255,255,0.5)'; c.font='30px "Courier New",monospace'; c.textAlign='center';
+    c.globalAlpha=p; c.fillText('咻 ——', cx+200, 160); c.globalAlpha=1; c.textAlign='left'; }
+  // 幕3：像素秘境——层叠森林、远山、云鸟、花草、萤火
+  s1(t){ const c=this.r.ctx; this.mountains();
+    c.fillStyle='#7ec8e3'; c.fillRect(0,0,CONFIG.W,CONFIG.H/2); this.forestGround();
+    this.clouds(6,1); this.birds();
+    // 近景树木
+    this.trees([60,300,560,820,1080], [320,350,330,360,340]);
+    // 花草
+    const fx=[120,260,500,700,940,1150,60,420,760,1000]; const fy=[420,460,440,480,430,470,520,500,520,540];
+    this.flowers(fx,fy);
+    // 蘑菇
+    for(let i=0;i<6;i++){ const mx=[180,680,900,380,1040,220][i], my=[460,500,440,520,480,540][i];
+      c.fillStyle='#F06292'; c.fillRect(mx,my,12,6); c.fillStyle='#FFE0B2'; c.fillRect(mx+4,my+4,4,6); }
+    // 萤火
+    c.fillStyle='#FFEB3B'; for(let i=0;i<14;i++){ const gy=430+(i*37)%180, gx=(i*173+Math.sin(t*3+i)*20)%CONFIG.W; c.globalAlpha=0.5+0.5*Math.sin(t*4+i); c.fillRect(gx,gy,3,3); } c.globalAlpha=1;
+    // 瀑布小溪
+    c.fillStyle='#64B5F6'; c.fillRect(1020,400,26,150); c.fillStyle='#E3F2FD'; for(let i=0;i<5;i++) c.fillRect(1024+i*4,404+((t*40+i*30)%140),3,8);
+    // 标题大字
+    c.fillStyle='#FFD740'; c.globalAlpha=Math.min(1,t*1.5); c.font='52px "Courier New",monospace'; c.textAlign='center';
+    c.fillText('像素秘境', CONFIG.W/2, 150); c.globalAlpha=1; c.textAlign='left'; }
+  // 幕4：冒险者的乐土——村落市集、村民、动物、栅栏
+  s1b(t){ const c=this.r.ctx; this.mountains();
+    c.fillStyle='#7ec8e3'; c.fillRect(0,0,CONFIG.W,CONFIG.H/2); this.forestGround();
+    this.clouds(7,2); this.birds();
+    // 房屋（带烟囱炊烟）
+    const house=(hx,hy)=>{ c.fillStyle='#8D6E63'; c.fillRect(hx,hy,120,80); c.fillStyle='#5D4037'; c.fillRect(hx-8,hy-30,136,34); c.fillStyle='#795548'; c.fillRect(hx+10,hy,14,30); c.fillStyle='#FFE082'; c.fillRect(hx+80,hy+14,26,22);
+      c.fillStyle='#4E342E'; c.fillRect(hx+18,hy-40,10,14); c.fillStyle='rgba(200,200,200,0.7)'; c.fillRect(hx+22,hy-62,4,24); };
+    house(100,430); house(420,400); house(760,450); house(980,420);
+    // 市集摊位
+    c.fillStyle='#795548'; c.fillRect(200,520,70,30); c.fillStyle='#FFD54F'; c.fillRect(206,514,12,8); c.fillRect(224,514,12,8); c.fillRect(242,514,12,8);
+    c.fillStyle='#5D4037'; c.fillRect(560,540,80,24); c.fillStyle='#EF5350'; c.fillRect(566,532,10,8); c.fillRect(582,532,10,8); c.fillRect(598,532,10,8); c.fillRect(614,532,10,8);
+    // 栅栏
+    c.fillStyle='#8D6E63'; for(let i=0;i<14;i++) c.fillRect(40+i*40,540,6,26);
+    // 树木与花草
+    this.trees([50,520,700,1060], [400,430,410,440]); this.flowers([120,340,640,920,1120,60,480,820],[500,520,540,470,520,560,480,560]);
+    // 村民（行走/劳作/交谈）
+    this.villager(330,470); this.villager(700,500); this.villager(900,470); this.villager(230,530); this.villager(620,560); this.villager(1080,500);
+    // 小鸡
+    for(let i=0;i<4;i++){ const cxx=150+i*40+Math.sin(t*3+i)*2, cyy=560+((i%2)*10); c.fillStyle='#FFF'; c.fillRect(cxx,cyy,8,7); c.fillStyle='#FF7043'; c.fillRect(cxx+7,cyy-1,3,3); c.fillStyle='#E64A19'; c.fillRect(cxx+9,cyy-2,1,1); }
+    // 井
+    c.fillStyle='#78909C'; c.fillRect(860,530,30,8); c.fillRect(856,536,4,20); c.fillRect(890,536,4,20);
+    c.fillStyle='#4FC3F7'; c.fillRect(862,528,26,4); }
+  villager(x,y){ const c=this.r.ctx; c.fillStyle='#6B4423'; c.fillRect(x,y,12,8); c.fillStyle='#F8C398'; c.fillRect(x+1,y+7,10,8); c.fillStyle='#3C3F44'; c.fillRect(x+1,y+15,4,8); c.fillRect(x+7,y+15,4,8); }
+  s1c(t){ const c=this.r.ctx; const tilt=this.r.cache.get('tile_forest');
+    c.fillStyle='#5b8a9e'; c.fillRect(0,0,CONFIG.W,CONFIG.H/2);
+    for(let y=CONFIG.H/2;y<CONFIG.H;y+=16)for(let x=0;x<CONFIG.W;x+=16)c.drawImage(tilt,x,y);
+    // 阴云压城（乌云层叠）
+    for(let i=0;i<8;i++){ const x=((i*223+t*6)%(CONFIG.W+200))-100, y=(i*47)%120;
+      c.fillStyle='rgba(50,44,66,0.85)'; c.fillRect(x,y,130,34); c.fillRect(x+24,y-18,90,22); c.fillRect(x+60,y+18,70,16); }
+    // 渐暗的太阳
+    c.fillStyle='#B0A88C'; c.fillRect(600,60,90,20);
+    // 枯死树木（黑影）
+    for(let i=0;i<6;i++){ const tx=[120,420,700,900,1120,240][i], ty=[360,400,380,420,370,430][i];
+      c.fillStyle='#3A2E2E'; c.fillRect(tx,ty,10,30); c.fillRect(tx-8,ty-6,26,6); c.fillRect(tx-4,ty-12,18,6); }
+    // 腐化地面斑点
+    c.fillStyle='rgba(43,16,60,0.5)'; for(let i=0;i<10;i++){ const px=(i*173)%CONFIG.W, py=CONFIG.H/2+((i*67)%CONFIG.H/2); c.fillRect(px,py,20,14); }
+    // 乌鸦
+    for(let i=0;i<6;i++){ const bx=((i*190+t*40)%CONFIG.W), by=(90+i*40)%(CONFIG.H/2-40); c.strokeStyle='#1a1a1a'; c.lineWidth=2;
+      c.beginPath(); c.arc(bx,by,4,0,7); c.arc(bx+8,by-3,4,0,7); c.stroke(); }
+    // 紫雾漫起
+    c.fillStyle='rgba(30,8,40,.28)'; c.fillRect(0,0,CONFIG.W,CONFIG.H);
+    // 远处裂隙裂痕
+    c.strokeStyle='rgba(156,39,176,0.6)'; c.lineWidth=3; c.beginPath(); c.moveTo(CONFIG.W-80,20); c.lineTo(CONFIG.W-140,120); c.lineTo(CONFIG.W-90,180); c.stroke(); }
+  sceneSwarm(t){ const c=this.r.ctx; const corrupt=this.r.cache.get('tile_corrupt'), grass=this.r.cache.get('tile_forest');
+    const p=Math.min(1,t/1.8); c.fillStyle='#1a0a1f'; c.fillRect(0,0,CONFIG.W,CONFIG.H);
+    for(let y=0;y<CONFIG.H;y+=16)for(let x=0;x<CONFIG.W;x+=16)c.drawImage((x/16+y/16)%5<3*p?corrupt:grass,x,y);
+    c.fillStyle='rgba(10,2,16,.55)'; c.fillRect(0,0,CONFIG.W,CONFIG.H);
+    // 地面裂缝发光
+    for(let i=0;i<8;i++){ const gx=(i*260+40)%CONFIG.W; c.strokeStyle='rgba(224,64,251,0.5)'; c.lineWidth=2; c.beginPath(); c.moveTo(gx,CONFIG.H-20); c.lineTo(gx+((i%3)*10),CONFIG.H-60); c.lineTo(gx,CONFIG.H-100); c.stroke(); }
+    // 怪物群（更多、分层大小）
+    const mb=this.r.cache.get('mon_basic'), mf=this.r.cache.get('mon_fast');
+    const N=20;
+    for(let i=0;i<N;i++){ const a=i/N*Math.PI*2+t*0.4; const rad=70+i%3*36;
+      c.drawImage(i%4===0?mf:mb, CONFIG.W/2+Math.cos(a)*rad, CONFIG.H/2+Math.sin(a)*rad); }
+    // 裂隙传送门（天空）
+    c.fillStyle='#4A148C'; c.fillRect(CONFIG.W/2-60,0,120,60); c.fillStyle='#9C27B0'; c.fillRect(CONFIG.W/2-40,0,80,60);
+    c.fillStyle='#E040FB'; for(let i=0;i<8;i++){ c.fillRect(CONFIG.W/2-60+((i%5)*14),((i*31)%60),4,4); }
+    // 红条进度（腐蚀蔓延）
+    c.fillStyle='#FF3B3B'; c.fillRect(CONFIG.W/2-130,30,260,7);
+    // 飘散的紫色污染颗粒
+    for(let i=0;i<16;i++){ const gx=(i*97+t*30)%CONFIG.W, gy=(i*53)%CONFIG.H; c.globalAlpha=0.5+0.5*Math.sin(t*3+i); c.fillStyle='#B948C2'; c.fillRect(gx,gy,3,3); } c.globalAlpha=1; }
+  s2c(t){ const c=this.r.ctx; const grass=this.r.cache.get('tile_forest'), mb=this.r.cache.get('mon_basic');
+    c.fillStyle='#2a0a20'; c.fillRect(0,0,CONFIG.W,CONFIG.H);
+    for(let y=0;y<CONFIG.H;y+=16)for(let x=0;x<CONFIG.W;x+=16)c.drawImage(grass,x,y);
+    c.fillStyle='rgba(20,3,26,.5)'; c.fillRect(0,0,CONFIG.W,CONFIG.H);
+    // 怪物墙（大量）
+    for(let i=0;i<16;i++){ c.drawImage(mb, 40+i*30+ (t*60%20), 240+((i*37)%160)); }
+    // 战斗中的冒险者（挥砍/倒下）
+    for(let i=0;i<6;i++){ const vx=160+i*190, vy=300+((i*53)%110);
+      if(i%3===0){ c.fillStyle='#F8C398'; c.fillRect(vx,vy,10,8); c.fillStyle='#8B5E3C'; c.fillRect(vx-1,vy+7,12,12); c.fillStyle='#B0BEC5'; c.fillRect(vx-8,vy-2,4,12); }
+      else if(i%3===1){ c.fillStyle='#F8C398'; c.fillRect(vx,vy+14,10,8); c.fillStyle='#8B5E3C'; c.fillRect(vx-1,vy+21,12,12); }
+      else { c.fillStyle='#F8C398'; c.fillRect(vx,vy,10,8); c.fillStyle='#8B5E3C'; c.fillRect(vx-1,vy+7,12,12); c.fillStyle='#FFD740'; c.fillRect(vx+6,vy-6,4,8); } }
+    // 金色灵魂光点（战斗余晖）
+    c.fillStyle='#FFD740'; for(let i=0;i<12;i++){ const gx=(i*160+(t*40)%200)%CONFIG.W, gy=260+((i*71)%180); c.globalAlpha=Math.max(0,0.9-((t*0.8+i)%1)); c.fillRect(gx,gy,4,4); }
+    // 爆炸闪光
+    for(let i=0;i<4;i++){ const ex=(i*330+t*80)%CONFIG.W, ey=260+((i*90)%200); c.globalAlpha=Math.max(0,0.7-((t*2+i*0.5)%1)); c.fillStyle='#FFAB40'; c.fillRect(ex-10,ey-10,20,20); c.fillStyle='#FFF3E0'; c.fillRect(ex-3,ey-3,6,6); } c.globalAlpha=1;
+    c.globalAlpha=1; c.fillStyle='#E040FB'; c.fillRect(CONFIG.W/2-8+Math.sin(t)*6, 200, 6, 26); }
+  s3(t){ const c=this.r.ctx; const corrupt=this.r.cache.get('tile_corrupt');
+    c.fillStyle='#16061f'; c.fillRect(0,0,CONFIG.W,CONFIG.H);
+    for(let y=0;y<CONFIG.H;y+=16)for(let x=0;x<CONFIG.W;x+=16)c.drawImage(corrupt,x,y);
+    // 巨大裂隙（背景）
+    c.fillStyle='#9C27B0'; c.fillRect(CONFIG.W/2-50,0,100,CONFIG.H);
+    for(let i=0;i<14;i++){ c.fillStyle='#E040FB'; c.fillRect(CONFIG.W/2-50+((i%5)*20),((i*43)%CONFIG.H),4,4); }
+    // 升起的灵魂碎片（金色光柱大量上浮）
+    for(let i=0;i<46;i++){ const gx=((i*173)+(t*30)%400)%CONFIG.W, gy=(CONFIG.H-((t*60+i*13)%CONFIG.H));
+      c.fillStyle='#FFD740'; c.globalAlpha=0.5+0.5*Math.sin(t*3+i); c.fillRect(gx,gy,3,3); }
+    c.globalAlpha=1;
+    // 倒下的冒险者剪影（灵魂化为光点）
+    for(let i=0;i<5;i++){ const sx=120+i*230; c.fillStyle='rgba(60,50,70,0.85)'; c.fillRect(sx,CONFIG.H-70,14,50); c.fillRect(sx+2,CONFIG.H-80,10,12);
+      c.fillStyle='#FFD740'; c.fillRect(sx+5,CONFIG.H-88-((t*20+i)%20),3,3); }
+    // 地面裂缝
+    c.strokeStyle='rgba(224,64,251,0.5)'; c.lineWidth=2; for(let i=0;i<6;i++){ c.beginPath(); c.moveTo(i*240,CONFIG.H); c.lineTo(i*240+40,CONFIG.H-50); c.stroke(); }
+    c.fillStyle='#FFC107'; c.fillRect(CONFIG.W/2-30,CONFIG.H-60,60,10); c.fillStyle='#FFD740'; c.fillRect(CONFIG.W/2-20,CONFIG.H-70,40,12); }
+  s3b(t){ const c=this.r.ctx; const corrupt=this.r.cache.get('tile_corrupt');
+    c.fillStyle='#16061f'; c.fillRect(0,0,CONFIG.W,CONFIG.H);
+    for(let y=0;y<CONFIG.H;y+=16)for(let x=0;x<CONFIG.W;x+=16)c.drawImage(corrupt,x,y);
+    // 巨大秘境币堆（金币山，闪烁）
+    c.fillStyle='#3a2a1a'; c.fillRect(CONFIG.W/2-140,CONFIG.H-70,280,30); c.fillStyle='#B8860B'; c.fillRect(CONFIG.W/2-120,CONFIG.H-92,240,22);
+    for(let i=0;i<14;i++){ c.fillStyle='#FFC107'; c.fillRect(CONFIG.W/2-120+((i*41)%220),CONFIG.H-96-((i*19)%46),14,8); }
+    // 金币闪光
+    for(let i=0;i<18;i++){ const gx=CONFIG.W/2-120+((i*53)%240), gy=CONFIG.H-70-((i*29)%80); c.globalAlpha=0.4+0.6*Math.sin(t*4+i); c.fillStyle='#FFEB3B'; c.fillRect(gx,gy,3,3); } c.globalAlpha=1;
+    // 三位英雄剪影（脉动）
+    const sr=this.r.cache.get('silhouette_ranger'), sg=this.r.cache.get('silhouette_guardian'), sm=this.r.cache.get('silhouette_mage');
+    c.globalAlpha=0.75+0.25*Math.sin(t*2); c.drawImage(sr,220,300); c.drawImage(sg,580,294); c.drawImage(sm,880,300); c.globalAlpha=1;
+    // 脚下光环
+    for(const hx of [232,596,896]){ c.strokeStyle='rgba(255,215,64,0.5)'; c.lineWidth=2; c.beginPath(); c.arc(hx+16,336,26,0,7); c.stroke(); }
+    c.fillStyle='#9C27B0'; c.fillRect(CONFIG.W/2-50,0,100,CONFIG.H); }
+  s4(t){ const c=this.r.ctx; const corrupt=this.r.cache.get('tile_corrupt'), grass=this.r.cache.get('tile_forest');
+    for(let y=0;y<CONFIG.H;y+=16)for(let x=0;x<CONFIG.W;x+=16)c.drawImage(x>CONFIG.W/2?corrupt:grass,x,y);
+    c.fillStyle='#87CEEB'; c.fillRect(0,0,CONFIG.W,CONFIG.H/2); c.fillStyle='rgba(20,3,26,.3)'; c.fillRect(CONFIG.W/2,0,CONFIG.W/2,CONFIG.H/2);
+    this.clouds(5,3);
+    // 主角（放大）转身迈步
+    const hero=this.r.cache.get('hero_wanderer_idle'); c.save(); c.translate(300,320); c.scale(2,2); c.drawImage(hero,0,0); c.restore();
+    c.fillStyle='#5D4037'; c.fillRect(300-6,320+30,12,20);
+    // 脚印
+    c.fillStyle='rgba(90,70,50,0.6)'; for(let i=0;i<5;i++) c.fillRect(296-((t*8+i*14)%40),330+((i%2)*6),8,4);
+    // 远处怪物剪影
+    const mb=this.r.cache.get('mon_basic'); c.globalAlpha=0.5; c.drawImage(mb,980,300); c.drawImage(mb,1080,340); c.drawImage(mb,1010,380); c.globalAlpha=1;
+    // 六大区域地形色块（俯视示意）
+    const blocks=[[120,430,'#2e7d32','森林'],[300,330,'#c49a3c','沙漠'],[470,180,'#90caf9','冻土'],[650,260,'#e64a19','火山'],[800,430,'#6d8f3c','沼泽'],[700,90,'#6a1b9a','虚空']];
+    for(const [bx,by,col,nm] of blocks){ c.fillStyle=col; c.globalAlpha=0.8; c.fillRect(bx-14,by-10,28,20); c.fillStyle='#fff'; c.font='10px "Courier New",monospace'; c.fillText(nm,bx-10,by+16); } c.globalAlpha=1;
+    c.globalAlpha=0.8+0.2*Math.sin(t*3); c.font='16px "Courier New",monospace'; c.textAlign='center';
+    c.fillStyle='#FFD740'; c.fillText('森林 · 沙漠 · 冻土 · 火山 · 沼泽 · 虚空', CONFIG.W/2, 560); c.globalAlpha=1; c.textAlign='left'; }
+  logo(t){ const c=this.r.ctx; c.fillStyle='#000'; c.fillRect(0,0,CONFIG.W,CONFIG.H);
+    // 像素山景
+    c.fillStyle='#1a1a2e'; c.beginPath(); c.moveTo(0,CONFIG.H); c.lineTo(280,430); c.lineTo(560,CONFIG.H); c.closePath(); c.fill();
+    c.fillStyle='#16161f'; c.beginPath(); c.moveTo(360,CONFIG.H); c.lineTo(640,380); c.lineTo(920,CONFIG.H); c.closePath(); c.fill();
+    // 星与月亮
+    this.stars(60,4); c.fillStyle='#FFF9C4'; c.fillRect(CONFIG.W-140,70,26,26);
+    // 地面秘境币点缀
+    for(let i=0;i<10;i++){ c.globalAlpha=0.6+0.4*Math.sin(t*3+i); c.fillStyle='#FFC107'; c.fillRect(80+i*130,CONFIG.H-24,12,8); } c.globalAlpha=1;
+    c.fillStyle='#FFD740'; c.font='46px "Courier New",monospace'; c.textAlign='center';
+    c.fillText('像素秘境：割草幸存者', CONFIG.W/2, CONFIG.H/2-24); c.globalAlpha=1;
+    c.fillStyle='rgba(255,255,255,.85)'; c.font='18px "Courier New",monospace'; c.fillText('点击开始冒险',CONFIG.W/2,CONFIG.H/2+36); c.globalAlpha=1; c.textAlign='left'; }
+}
+"use strict";
+// ============================================================
+// 输入系统（PC 键盘 + 移动端摇杆，支持旋转映射）
+// ============================================================
+class InputManager {
+  constructor(screen){ this.screen=screen; this.keys={up:false,down:false,left:false,right:false};
+    this.joystick={active:false,dx:0,dy:0};
+    window.addEventListener('keydown',e=>{ const k=e.key.toLowerCase();
+      if(k==='w'||k==='arrowup')this.keys.up=true; if(k==='s'||k==='arrowdown')this.keys.down=true;
+      if(k==='a'||k==='arrowleft')this.keys.left=true; if(k==='d'||k==='arrowright')this.keys.right=true;
+      if(k==='escape') Game.instance.togglePause(); });
+    window.addEventListener('keyup',e=>{ const k=e.key.toLowerCase();
+      if(k==='w'||k==='arrowup')this.keys.up=false; if(k==='s'||k==='arrowdown')this.keys.down=false;
+      if(k==='a'||k==='arrowleft')this.keys.left=false; if(k==='d'||k==='arrowright')this.keys.right=false; });
+    window.addEventListener('blur',()=>{ this.keys.up=this.keys.down=this.keys.left=this.keys.right=false; if(Game.instance&&Game.instance.state==='playing') Game.instance.pause(); });
+    if(Utils.isMobile()) this.initJoystick();
+  }
+  initJoystick(){ const el=document.getElementById('joystick'), thumb=document.getElementById('joystick-thumb'); el.style.display='block';
+    let cx=0,cy=0; const R=40;
+    el.addEventListener('touchstart',e=>{ e.preventDefault(); const rc=el.getBoundingClientRect(); cx=rc.left+rc.width/2; cy=rc.top+rc.height/2; this.joystick.active=true; },{passive:false});
+    el.addEventListener('touchmove',e=>{ e.preventDefault(); if(!this.joystick.active)return; const t=e.touches[0]; const pos=this.screen.map(t.clientX,t.clientY);
+      let dx=pos.x-cx, dy=pos.y-cy; const d=Math.sqrt(dx*dx+dy*dy); if(d>R){ dx=dx/d*R; dy=dy/d*R; }
+      thumb.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      this.joystick.dx=dx/R; this.joystick.dy=dy/R; },{passive:false});
+    const end=e=>{ e.preventDefault(); this.joystick.active=false; this.joystick.dx=0; this.joystick.dy=0; thumb.style.transform='translate(-50%,-50%)'; };
+    el.addEventListener('touchend',end,{passive:false}); el.addEventListener('touchcancel',end,{passive:false}); }
+  get(){ if(Utils.isMobile()&&this.joystick.active) return { left:this.joystick.dx<-0.2, right:this.joystick.dx>0.2, up:this.joystick.dy<-0.2, down:this.joystick.dy>0.2 };
+    return this.keys; }
+}
+
+// ============================================================
+// 主游戏
+// ============================================================
+class Game {
+  constructor(){
+    Game.instance=this;
+    this.canvas=document.getElementById('game-canvas');
+    this.r=new Renderer(this.canvas);
+    this.screen=new ScreenManager();
+    this.sprites=new SpriteFactory(this.r);
+    this.audio=new AudioManager();
+    this.input=new InputManager(this.screen);
+    this.quality=Utils.storage.get(CONFIG.STORAGE.QUALITY,'HIGH');
+    this.particles=new ParticleSystem(this.r,this.quality);
+    this.bank=Utils.storage.get(CONFIG.STORAGE.COINS,0);
+    this.unlocks=Utils.storage.get(CONFIG.STORAGE.UNLOCKS,['wanderer']);
+    this.purchases=Utils.storage.get(CONFIG.STORAGE.PURCHASES,{});
+    this.selected=Utils.storage.get(CONFIG.STORAGE.HERO,'wanderer');
+    this.weapons=Utils.storage.get(CONFIG.STORAGE.WEAPONS,['crossbow']);
+    this.weapon=Utils.storage.get(CONFIG.STORAGE.WEAPON,'crossbow');
+    this.region=Utils.storage.get(CONFIG.STORAGE.REGION,'forest');
+    this.regionProgress=Utils.storage.get(CONFIG.STORAGE.REGION_PROGRESS,0);
+    this.cleared=Utils.storage.get(CONFIG.STORAGE.CLEARED,[]);
+    this.state='menu'; this.mode='menu';
+    this.time=0; this.lastT=0; this.accum=0; this.fps=Utils.isMobile()?CONFIG.FPS_MOBILE:CONFIG.FPS_PC; this.fixedDt=1/this.fps;
+    this.bossSpawned=false; this.spawnT=0; this.tooltipTimer=null; this.regionClearedInRun=false;
+    this.up={}; this.runCoins=0; this.kills=0;
+    this.bindUI(); this.refreshMenu(); this.refreshShop(); this.refreshHeroes(); this.refreshWeapons(); this.refreshRegions(); this.refreshSettings(); this.refreshPrep();
+  }
+  // ---------- UI 绑定 ----------
+  $(id){ return document.getElementById(id); }
+  bindUI(){
+    this.$('btn-prep').onclick=()=>{ this.audio.sfx('click'); this.show('screen-prep'); this.refreshPrep(); };
+    this.$('btn-prep-back').onclick=()=>{ this.audio.sfx('click'); this.show('screen-menu'); };
+    this.$('btn-prep-go').onclick=()=>{ this.audio.sfx('click'); this.startRun(this.selected,this.weapon,this.region); };
+    this.$('btn-heroes').onclick=()=>{ this.audio.sfx('click'); this.show('screen-heroes'); };
+    this.$('btn-heroes-back').onclick=()=>{ this.audio.sfx('click'); this.show('screen-menu'); };
+    this.$('btn-weapons').onclick=()=>{ this.audio.sfx('click'); this.show('screen-weapons'); this.refreshWeapons(); };
+    this.$('btn-weapons-back').onclick=()=>{ this.audio.sfx('click'); this.show('screen-menu'); };
+    this.$('btn-regions').onclick=()=>{ this.audio.sfx('click'); this.show('screen-regions'); this.refreshRegions(); };
+    this.$('btn-regions-back').onclick=()=>{ this.audio.sfx('click'); this.show('screen-menu'); };
+    this.$('btn-fullmap-close').onclick=()=>{ this.audio.sfx('click'); this.hideAll(); if(this.mode==='run'){ this.$('hud').style.display='block'; this.state='playing'; } else this.show('screen-menu'); };
+    this.$('btn-shop').onclick=()=>{ this.audio.sfx('click'); this.show('screen-shop'); this.refreshShop(); };
+    this.$('btn-shop-back').onclick=()=>{ this.audio.sfx('click'); this.show('screen-menu'); };
+    this.$('btn-story').onclick=()=>{ this.audio.sfx('click'); this.playStory(); };
+    this.$('btn-resume').onclick=()=>{ this.audio.sfx('click'); this.resume(); };
+    this.$('btn-quit').onclick=()=>{ this.audio.sfx('click'); this.backToMenu(); };
+    this.$('btn-settle-ok').onclick=()=>{ this.audio.sfx('click'); this.settleConfirm(); };
+    this.$('btn-settle-menu').onclick=()=>{ this.audio.sfx('click'); this.settleConfirm(true); };
+    this.$('pause-btn').onclick=()=>this.togglePause();
+    this.$('seg-quality').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; this.setQuality(b.dataset.q); });
+    this.$('seg-sound').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; this.audio.setSound(b.dataset.s==='1'); this.refreshSettings(); });
+    this.$('seg-voice').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; this.audio.setVoice(b.dataset.v==='1'); this.refreshSettings(); });
+    this.$('seg-climate').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; this.audio.setClimate(b.dataset.c==='1'); this.refreshSettings(); });
+    // 小地图：双击查看完整地图
+    const mm=this.$('minimap'); mm.addEventListener('dblclick',e=>{ e.stopPropagation(); this.openFullMap(); });
+    mm.addEventListener('click',e=>{ e.stopPropagation(); this.openFullMap(); });
+    this.$('btn-map').onclick=(e)=>{ e.stopPropagation(); this.openFullMap(); };
+    // 画布点击：查看/交互物品
+    this.canvas.addEventListener('click',e=>this.onCanvasClick(e));
+    this.canvas.addEventListener('touchstart',e=>{ if(!Utils.isMobile()) return; const t=e.touches[0]; this.onCanvasTap(t); },{passive:true});
+    // 完整地图点击
+    this.$('fullmap-canvas').addEventListener('click',e=>this.onFullMapClick(e));
+  }
+  show(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('show')); this.$(id).classList.add('show'); }
+  hideAll(){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('show')); }
+  // ---------- 菜单/商店/英雄/武器/区域 ----------
+  refreshMenu(){ this.$('menu-coins').textContent=this.bank; this.$('menu-regions').textContent=this.cleared.length; }
+  refreshSettings(){
+    document.querySelectorAll('#seg-quality button').forEach(b=>b.classList.toggle('on', b.dataset.q===this.quality));
+    document.querySelectorAll('#seg-sound button').forEach(b=>b.classList.toggle('on', b.dataset.s===(this.audio.sound?'1':'0')));
+    document.querySelectorAll('#seg-voice button').forEach(b=>b.classList.toggle('on', b.dataset.v===(this.audio.voiceOn?'1':'0')));
+    document.querySelectorAll('#seg-climate button').forEach(b=>b.classList.toggle('on', b.dataset.c===(this.audio.climateOn?'1':'0')));
+  }
+  setQuality(q){ this.quality=q; Utils.storage.set(CONFIG.STORAGE.QUALITY,q); this.particles.setQuality(q); this.refreshSettings(); }
+  regionUnlocked(key){ return REGIONS[key].order<=this.regionProgress; }
+  refreshHeroes(){
+    const grid=this.$('hero-grid'); grid.innerHTML='';
+    Object.values(HEROES).forEach(h=>{
+      const card=document.createElement('div'); card.className='hero-card'+(this.unlocks.includes(h.key)?'':' locked');
+      const canvas=document.createElement('canvas'); canvas.width=h.w*2; canvas.height=h.h*2;
+      const ctx=canvas.getContext('2d'); ctx.imageSmoothingEnabled=false;
+      const spr=this.r.cache.get(h.sprite+'_idle'); if(spr) ctx.drawImage(spr,0,0,h.w*2,h.h*2);
+      const name=document.createElement('div'); name.className='hc-name'; name.textContent=h.name;
+      const desc=document.createElement('div'); desc.className='hc-desc';
+      desc.textContent = this.unlocks.includes(h.key)? h.desc : `未解锁 · 需 ${h.unlockCost} 秘境币`;
+      const tag=document.createElement('div'); tag.style.cssText='margin-top:6px;font-size:12px';
+      tag.innerHTML = this.unlocks.includes(h.key) ? `<span style="color:#FFD740">${this.selected===h.key?'✔ 已选择':'点击选择'}</span>` : `<span style="color:#888">🪙 ${h.unlockCost}</span>`;
+      card.appendChild(canvas); card.appendChild(name); card.appendChild(desc); card.appendChild(tag);
+      card.onclick=()=>{ this.audio.sfx('click');
+        if(this.unlocks.includes(h.key)){ this.selected=h.key; Utils.storage.set(CONFIG.STORAGE.HERO,h.key); this.refreshHeroes(); this.refreshPrep(); }
+        else if(this.bank>=h.unlockCost){ this.bank-=h.unlockCost; Utils.storage.set(CONFIG.STORAGE.COINS,this.bank); this.unlocks.push(h.key); Utils.storage.set(CONFIG.STORAGE.UNLOCKS,this.unlocks); this.selected=h.key; Utils.storage.set(CONFIG.STORAGE.HERO,h.key); this.refreshHeroes(); this.refreshMenu(); this.refreshPrep(); }
+        else this.toast('秘境币不足'); };
+      grid.appendChild(card); });
+  }
+  refreshWeapons(){
+    const grid=this.$('weapon-grid'); grid.innerHTML='';
+    WEAPON_ORDER.forEach(k=>{ const w=WEAPONS[k]; const owned=this.weapons.includes(k);
+      const card=document.createElement('div'); card.className='weapon-card'+(owned?'':' locked');
+      const icon=document.createElement('canvas'); icon.className='wc-icon'; icon.width=44; icon.height=44;
+      const ctx=icon.getContext('2d'); ctx.imageSmoothingEnabled=false; const spr=this.r.cache.get(w.icon); if(spr) ctx.drawImage(spr,0,0,44,44);
+      const name=document.createElement('div'); name.className='wc-name'; name.textContent=w.name;
+      const desc=document.createElement('div'); desc.className='wc-desc';
+      desc.textContent = owned ? w.desc : `未解锁 · 需 ${w.unlockCost} 秘境币`;
+      const tag=document.createElement('div'); tag.style.cssText='margin-top:5px;font-size:12px';
+      tag.innerHTML = owned ? `<span style="color:#FFD740">${this.weapon===k?'✔ 已装备':'点击装备'}</span>` : `<span style="color:#888">🪙 ${w.unlockCost}</span>`;
+      card.appendChild(icon); card.appendChild(name); card.appendChild(desc); card.appendChild(tag);
+      card.onclick=()=>{ this.audio.sfx('click');
+        if(owned){ this.weapon=k; Utils.storage.set(CONFIG.STORAGE.WEAPON,k); this.refreshWeapons(); this.refreshPrep(); }
+        else if(this.bank>=w.unlockCost){ this.bank-=w.unlockCost; Utils.storage.set(CONFIG.STORAGE.COINS,this.bank); this.weapons.push(k); Utils.storage.set(CONFIG.STORAGE.WEAPONS,this.weapons); this.weapon=k; Utils.storage.set(CONFIG.STORAGE.WEAPON,k); this.refreshWeapons(); this.refreshMenu(); this.refreshPrep(); }
+        else this.toast('秘境币不足'); };
+      grid.appendChild(card); });
+  }
+  refreshRegions(){
+    const grid=this.$('region-grid'); grid.innerHTML='';
+    REGION_ORDER.forEach(k=>{ const rg=REGIONS[k]; const unlocked=this.regionUnlocked(k); const done=this.cleared.includes(k);
+      const card=document.createElement('div'); card.className='region-card'+(unlocked?'':' locked');
+      card.style.borderColor=rg.color;
+      if(done) card.innerHTML+=`<div class="rc-done">✔ 已净化</div>`;
+      else if(this.region===k) card.innerHTML+=`<div class="rc-cur">▶ 当前</div>`;
+      if(!unlocked) card.innerHTML+=`<div class="rc-lock">🔒</div>`;
+      const name=document.createElement('div'); name.className='rc-name'; name.textContent=rg.name; name.style.color=rg.color;
+      const meta=document.createElement('div'); meta.className='rc-meta';
+      meta.innerHTML = unlocked? `温度 <b style="color:#ff9">${rg.temp>0?'+':''}${rg.temp}°C</b> · 湿度 <b style="color:#9cf">${rg.humid}%</b><br>气候：${this.weatherName(rg.weather)} · 难度 ${'★'.repeat(rg.order+1)}` : `温度 · 湿度 · 气候 ????<br>击败上一区域 BOSS 后解锁`;
+      const boss=document.createElement('div'); boss.className='rc-boss'; boss.textContent=unlocked?`BOSS：${rg.bossName}`:'BOSS：未知';
+      const desc=document.createElement('div'); desc.className='rc-meta'; desc.style.cssText='font-size:11px;color:#889;margin-top:4px'; desc.textContent=rg.desc;
+      card.appendChild(name); card.appendChild(meta); card.appendChild(boss); card.appendChild(desc);
+      card.onclick=()=>{ this.audio.sfx('click'); if(unlocked){ this.region=k; Utils.storage.set(CONFIG.STORAGE.REGION,k); this.refreshRegions(); this.refreshPrep(); this.toast(`已选择区域：${rg.name}`); } };
+      grid.appendChild(card); });
+  }
+  weatherName(w){ return {leaf:'微风落叶',sand:'沙尘热浪',snow:'凛冽飞雪',ember:'灼热余烬',fog:'迷瘴雾气',void:'虚空低语'}[w]||w; }
+  refreshShop(){
+    this.$('shop-coins').textContent=this.bank;
+    const wrap=this.$('shop-upgrades'); wrap.innerHTML='';
+    const defs=[ {id:'maxhp', name:'生命上限 +10', cost:20, max:10}, {id:'dmg', name:'伤害 +5%', cost:15, max:10},
+      {id:'spd', name:'移速 +3%', cost:10, max:10}, {id:'pick', name:'拾取范围 +5%', cost:10, max:5} ];
+    defs.forEach(d=>{ const n=this.purchases[d.id]||0;
+      const b=document.createElement('button'); b.className='btn btn-sm'; b.disabled=n>=d.max;
+      b.textContent=`${d.name} (${n}/${d.max}) · ${d.cost}🪙`; b.style.cssText='min-width:170px;margin:6px;';
+      b.onclick=()=>{ if(this.bank>=d.cost && n<d.max){ this.bank-=d.cost; this.purchases[d.id]=(this.purchases[d.id]||0)+1; Utils.storage.set(CONFIG.STORAGE.COINS,this.bank); Utils.storage.set(CONFIG.STORAGE.PURCHASES,this.purchases); this.refreshShop(); this.refreshMenu(); this.audio.sfx('coin'); } else this.toast('秘境币不足'); };
+      wrap.appendChild(b); });
+  }
+  refreshPrep(){
+    // 英雄
+    const hw=this.$('prep-hero'); hw.innerHTML='';
+    Object.values(HEROES).forEach(h=>{ if(!this.unlocks.includes(h.key)) return;
+      const b=document.createElement('button'); b.className=(this.selected===h.key?'on':'')+(this.unlocks.includes(h.key)?'':' locked'); b.textContent=h.name;
+      b.onclick=()=>{ this.audio.sfx('click'); this.selected=h.key; Utils.storage.set(CONFIG.STORAGE.HERO,h.key); this.refreshPrep(); }; hw.appendChild(b); });
+    // 武器
+    const ww=this.$('prep-weapon'); ww.innerHTML='';
+    WEAPON_ORDER.forEach(k=>{ if(!this.weapons.includes(k)) return;
+      const b=document.createElement('button'); b.className=(this.weapon===k?'on':''); b.textContent=WEAPONS[k].name;
+      b.onclick=()=>{ this.audio.sfx('click'); this.weapon=k; Utils.storage.set(CONFIG.STORAGE.WEAPON,k); this.refreshPrep(); }; ww.appendChild(b); });
+    // 区域
+    const rw=this.$('prep-region'); rw.innerHTML='';
+    REGION_ORDER.forEach(k=>{ const rg=REGIONS[k]; const unlocked=this.regionUnlocked(k);
+      const b=document.createElement('button'); b.className=(this.region===k?'on':'')+(unlocked?'':' locked'); b.textContent=rg.name; b.style.borderColor=unlocked?rg.color:'';
+      if(!unlocked) b.title='未解锁';
+      b.onclick=()=>{ if(!unlocked){ this.toast('该区域未解锁，先净化上一区域'); return; } this.audio.sfx('click'); this.region=k; Utils.storage.set(CONFIG.STORAGE.REGION,k); this.refreshPrep(); };
+      rw.appendChild(b); });
+    const rg=REGIONS[this.region];
+    this.$('prep-region-info').innerHTML = `<span style="color:${rg.color}">${rg.name}</span> · ${this.weatherName(rg.weather)} · 温度 <b style="color:#ff9">${rg.temp>0?'+':''}${rg.temp}°C</b> · 湿度 <b style="color:#9cf">${rg.humid}%</b><br>${rg.desc}　BOSS：<b style="color:#ff8a80">${rg.bossName}</b>　难度 ${'★'.repeat(rg.order+1)}`;
+  }
+  // ---------- 完整地图 ----------
+  openFullMap(){ if(this.mode==='run'){ this.state='paused'; this.hideAll(); this.$('hud').style.display='none'; this.$('pause-btn').style.display='none'; } else this.hideAll();
+    this.show('screen-fullmap'); this.renderFullMap(); this.audio.sfx('click'); }
+  renderFullMap(){
+    const c=this.$('fullmap-canvas').getContext('2d'); c.imageSmoothingEnabled=false;
+    const W=920,H=560; c.fillStyle='#0a0e18'; c.fillRect(0,0,W,H);
+    // 网格底纹
+    c.strokeStyle='rgba(255,255,255,0.05)'; c.lineWidth=1;
+    for(let x=0;x<W;x+=40){ c.beginPath(); c.moveTo(x,0); c.lineTo(x,H); c.stroke(); }
+    for(let y=0;y<H;y+=40){ c.beginPath(); c.moveTo(0,y); c.lineTo(W,y); c.stroke(); }
+    const pos={ forest:[120,430], desert:[300,330], tundra:[470,180], volcano:[650,260], swamp:[800,430], void:[700,90] };
+    // 连接路径
+    c.strokeStyle='rgba(255,255,255,0.18)'; c.lineWidth=3; c.setLineDash([8,8]);
+    c.beginPath();
+    REGION_ORDER.forEach((k,i)=>{ const [x,y]=pos[k]; if(i===0) c.moveTo(x,y); else c.lineTo(x,y); }); c.stroke(); c.setLineDash([]);
+    // 区域节点
+    REGION_ORDER.forEach(k=>{ const rg=REGIONS[k]; const [x,y]=pos[k]; const unlocked=this.regionUnlocked(k); const done=this.cleared.includes(k);
+      c.save(); c.globalAlpha=unlocked?1:0.45;
+      c.fillStyle=rg.color; c.fillRect(x-60,y-35,120,70);
+      c.fillStyle='rgba(0,0,0,0.35)'; c.fillRect(x-60,y-35,120,70);
+      c.strokeStyle=unlocked?rg.color:'#444'; c.lineWidth=3; c.strokeRect(x-60,y-35,120,70);
+      if(this.region===k && this.mode==='run'){ c.strokeStyle='#FFD740'; c.globalAlpha=0.5+0.5*Math.sin(performance.now()/200); c.lineWidth=5; c.strokeRect(x-66,y-41,132,82); }
+      c.fillStyle='#fff'; c.font='16px "Courier New",monospace'; c.textAlign='center';
+      c.fillText(rg.name, x, y-10);
+      c.fillStyle='#ffd54f'; c.font='12px "Courier New",monospace';
+      c.fillText(`${rg.temp>0?'+':''}${rg.temp}°C · 湿度${rg.humid}%`, x, y+10);
+      c.font='12px "Courier New",monospace'; c.fillStyle=done?'#4caf50':(unlocked?'#bbb':'#666');
+      c.fillText(done?'✔ 已净化':(unlocked?`BOSS：${rg.bossName}`:'🔒 未解锁'), x, y+26);
+      c.restore(); });
+    // 图例
+    c.fillStyle='#889'; c.font='12px "Courier New",monospace'; c.textAlign='left';
+    c.fillText('● 双击地图任意处关闭 · 点击区域查看详情', 20, 30);
+  }
+  onFullMapClick(e){
+    const cv=this.$('fullmap-canvas'); const rect=cv.getBoundingClientRect();
+    const x=(e.clientX-rect.left)/rect.width*920, y=(e.clientY-rect.top)/rect.height*560;
+    const pos={ forest:[120,430], desert:[300,330], tundra:[470,180], volcano:[650,260], swamp:[800,430], void:[700,90] };
+    for(const k of REGION_ORDER){ const [nx,ny]=pos[k]; if(Math.abs(x-nx)<64 && Math.abs(y-ny)<42){
+      const rg=REGIONS[k]; const unlocked=this.regionUnlocked(k); const done=this.cleared.includes(k);
+      this.$('fullmap-info').innerHTML = unlocked? `<b style="color:${rg.color}">${rg.name}</b>　${this.weatherName(rg.weather)}　温度 <b style="color:#ff9">${rg.temp>0?'+':''}${rg.temp}°C</b>　湿度 <b style="color:#9cf">${rg.humid}%</b><br>${rg.desc}<br>BOSS：<b style="color:#ff8a80">${rg.bossName}</b>　难度 ${'★'.repeat(rg.order+1)}　${done?'<b style="color:#4caf50">（已净化）</b>':''}` : `<b style="color:#666">${rg.name}（未解锁）</b><br>击败上一区域 BOSS 后解锁`;
+      return; } }
+  }
+  // ---------- 流程 ----------
+  playStory(){
+    const watched=Utils.storage.get(CONFIG.STORAGE.WATCHED,false);
+    this.mode='story'; this.state='story'; this.hideAll(); this.$('hud').style.display='none'; this.$('pause-btn').style.display='none'; this.audio.stopClimate();
+    // 首次观看不显示跳过按钮；后续重看显示
+    this.story=new StoryPlayer(this.r,this.audio,()=>{ this.state='menu'; this.mode='menu'; this.hideAll(); this.show('screen-menu'); this.refreshMenu(); }, watched);
+    this.story.start();
+  }
+  startRun(heroId,weaponKey,regionKey){
+    this.mode='run'; this.state='playing'; this.region=regionKey; this.regionClearedInRun=false; this.bossSpawned=false;
+    this.hideAll(); this.$('hud').style.display='block'; if(Utils.isMobile()) this.$('pause-btn').style.display='block';
+    this.audio.bgm('game'); this.audio.playClimate(regionKey);
+    this.player=new Player(heroId,weaponKey);
+    const pu=this.purchases; this.player.maxHp+= (pu.maxhp||0)*10; this.player.hp=this.player.maxHp;
+    this.player.speed*= (1+(pu.spd||0)*0.03);
+    this.player.pickup*= (1+(pu.pick||0)*0.05);
+    this.monsters=[]; this.projs=[]; this.pickups=[]; this.objects=[]; this.particles=new ParticleSystem(this.r,this.quality);
+    const rg=REGIONS[regionKey]; this.particles.setWeather(rg.weather);
+    this.time=0; this.spawnT=0; this.up={}; this.runCoins=0; this.kills=0; this.hiding=false; this.shieldTimer=45; this.shieldActive=false;
+    this.buildArena();
+    for(let i=0;i<3;i++) this.spawnMonster(true);
+    if(/[?&]boss=1/.test(location.search)){ this.time=CONFIG.BOSS_TIME; this.player.extraDmg=9000; }
+    if(/[?&]lvlup=1/.test(location.search)){ this.player.exp=this.player.expNeed(); this.checkLevelUp(); }
+    this.updateHUD(); this.renderMinimap();
+    this.lastT=performance.now(); this.accum=0; this.loop();
+  }
+  buildArena(){
+    const cw=CONFIG.W, ch=CONFIG.H, g=CONFIG.WORLD_GRID;
+    // 9 屏世界：按 3×3 网格分布物件，让探索充满发现
+    const kinds=['crate','crate','pot','rock','grass','grass','crystal','pot','rock','crate','grass','crystal'];
+    for(let cy=0;cy<g;cy++)for(let cx=0;cx<g;cx++){
+      const ox=cx*cw, oy=cy*ch;
+      const n=4+Math.floor(Math.random()*3); // 每屏 4~6 个
+      const placed=[];
+      for(let i=0;i<n;i++){
+        let x=ox+Utils.rnd(90,cw-90), y=oy+Utils.rnd(90,ch-90);
+        // 避免与已放置物件重叠
+        let tries=0; while(tries<6 && placed.some(p=>Math.abs(p[0]-x)<80&&Math.abs(p[1]-y)<80)){ x=ox+Utils.rnd(90,cw-90); y=oy+Utils.rnd(90,ch-90); tries++; }
+        placed.push([x,y]);
+        this.objects.push(new WorldObject(Utils.pick(kinds),x,y));
+      }
+    }
+    // 出生点（世界中心）附近布置少量近身物件与结晶，开局即有可探索内容
+    const cx=CONFIG.WORLD_W/2, cy=CONFIG.WORLD_H/2;
+    this.objects.push(new WorldObject('crystal',cx+120,cy+80));
+    this.objects.push(new WorldObject('crate',cx-160,cy+40));
+    this.objects.push(new WorldObject('pot',cx+60,cy-140));
+    this.objects.push(new WorldObject('grass',cx-80,cy-60));
+    this.objects.push(new WorldObject('rock',cx+240,cy+180));
+  }
+  breakObject(o, byClick){
+    if(!o.alive) return; o.alive=false;
+    const cx=o.x+(o.type==='crystal'?8:8), cy=o.y+(o.type==='crystal'?11:8);
+    const meta=OBJECT_META[o.type]||{};
+    this.audio.sfx('break');
+    if(o.type==='crate'){ this.particles.spawn(cx,cy,CONFIG.PARTICLES.explode); if(Math.random()<0.6) this.pickups.push(new Pickup('coin',cx,cy,Utils.rndInt(1,2))); else this.pickups.push(new Pickup('exp',cx,cy,22)); }
+    else if(o.type==='pot'){ this.particles.spawn(cx,cy,CONFIG.PARTICLES.explode); const r=Math.random();
+      if(r<0.4) this.pickups.push(new Pickup('heal',cx,cy,15)); else if(r<0.75) this.pickups.push(new Pickup('coin',cx,cy,Utils.rndInt(2,4))); else this.pickups.push(new Pickup('exp',cx,cy,30)); }
+    else if(o.type==='crystal'){ this.particles.spawn(cx,cy,{high:24,med:12,low:5,colors:['#26C6DA','#B2EBF2'],life:0.9,speed:70}); this.pickups.push(new Pickup('exp',cx,cy,80)); this.r.shake=Math.max(this.r.shake,4); }
+    if(byClick){ this.showTooltip(`击碎「${meta.name}」`, meta.kind, '获得掉落！', {x:cx,y:cy}); }
+  }
+  loop(){ if(this.mode!=='run') return;
+    const now=performance.now(); let dt=(now-this.lastT)/1000; this.lastT=now;
+    dt=Math.min(dt,0.1); this.accum=Math.min(this.accum+dt,0.25); // 限制累积，避免主线程掉帧后进入更新风暴
+    let steps=0;
+    while(this.accum>=this.fixedDt && steps<6){ this.update(this.fixedDt); this.accum-=this.fixedDt; steps++; }
+    if(this.accum>=this.fixedDt) this.accum=0; // 丢弃积压，保证输入响应不卡
+    this.render(); this.renderMinimap(); requestAnimationFrame(()=>this.loop()); }
+  update(dt){
+    if(this.state!=='playing') return;
+    const p=this.player; this.time+=dt;
+    const input=this.input.get(); p.update(dt,input);
+    this.hiding=false; for(const o of this.objects){ if(o.type==='grass'&&Utils.dist(p.x+p.w/2,p.y+p.h/2,o.x+8,o.y+6)<40) this.hiding=true; }
+    for(const o of this.objects){ if(o.type!=='rock') continue; const pb=p.getBox(), rb=o.getBox();
+      if(Utils.rr(pb,rb)){ const ox=Math.min(pb.x+pb.w-rb.x, rb.x+rb.w-pb.x), oy=Math.min(pb.y+pb.h-rb.y, rb.y+rb.h-pb.y);
+        if(ox<oy) p.x += (pb.x<rb.x? -ox : ox); else p.y += (pb.y<rb.y? -oy : oy); } }
+    for(const o of this.objects){ if(o.type==='rock'||o.type==='grass'||!o.alive) continue;
+      if(o.cd>0) o.cd-=dt;
+      if(Utils.rr(p.getBox(),o.getBox()) && o.cd<=0){ o.hp--; o.cd=0.35; if(o.hp<=0) this.breakObject(o); } }
+    this.autoAttack(dt);
+    for(let i=this.monsters.length-1;i>=0;i--){ const m=this.monsters[i]; m.update(dt,p,this); if(!p.alive) break; }
+    this.updateProjectiles(dt);
+    this.updatePickups(dt);
+    if(this.up.shield){ this.shieldTimer-=dt; if(this.shieldTimer<=0 && !this.shieldActive){ this.shieldActive=true; this.particles.ring(p.x+p.w/2,p.y+p.h/2,'#80D8FF'); this.toast('屏障生成'); } }
+    this.checkLevelUp();
+    this.spawner(dt);
+    this.checkBoss();
+    this.particles.update(dt);
+    this.particles.updateWeather(dt);
+    if(this.r.shake>0) this.r.shake=Math.max(0,this.r.shake-dt*20);
+    if(this.r.flash>0) this.r.flash=Math.max(0,this.r.flash-dt*6);
+    this.updateHUD();
+  }
+  updateProjectiles(dt){
+    const p=this.player;
+    for(let i=this.projs.length-1;i>=0;i--){ const pr=this.projs[i]; pr.update(dt);
+      if(pr.life<=0){ this.projs.splice(i,1); continue; }
+      if(pr.isEnemy){ if(Utils.rr({x:pr.x-pr.s,y:pr.y-pr.s,w:pr.s*2,h:pr.s*2},p.getBox())){ p.hurt(pr.dmg,this); this.projs.splice(i,1); continue; } }
+      else { let hit=false;
+        for(let j=this.monsters.length-1;j>=0;j--){ const m=this.monsters[j];
+          if(Utils.rr({x:pr.x-pr.s,y:pr.y-pr.s,w:pr.s*2,h:pr.s*2},m.getBox())){
+            this.damageMonster(m,pr.dmg,pr);
+            if(pr.wtype==='ice'){ m.slow=Math.max(m.slow,1.2); this.particles.spawn(pr.x,pr.y,{high:8,med:4,low:1,colors:['#6EC6FF','#E1F5FE'],life:0.5,speed:40}); this.audio.sfx('ice'); }
+            if(pr.wtype==='blade'){ m.burn=5; m.burnT=0.5; this.particles.spawn(pr.x,pr.y,{high:10,med:5,low:2,colors:['#FF7043','#FFD54F'],life:0.5,speed:50}); this.audio.sfx('fire'); }
+            if(pr.wtype==='chain'){ this.audio.sfx('thunder'); this.chainLightning(m,pr.chain||2); }
+            if(pr.pierce>0){ pr.pierce--; hit=true; } else { this.projs.splice(i,1); hit=true; break; } } }
+        if(hit) continue; }
+      for(const o of this.objects){ if(!o.alive) continue;
+        if(o.type==='rock'&&Utils.rr({x:pr.x,y:pr.y,w:4,h:4},o.getBox())){ this.projs.splice(i,1); break; }
+        if((o.type==='crate'||o.type==='pot'||o.type==='crystal')&&Utils.rr({x:pr.x,y:pr.y,w:4,h:4},o.getBox())){ o.hp--; if(o.hp<=0) this.breakObject(o); this.projs.splice(i,1); break; } }
+    }
+  }
+  updatePickups(dt){
+    const p=this.player;
+    for(let i=this.pickups.length-1;i>=0;i--){ const pk=this.pickups[i]; pk.t+=dt;
+      const cx=p.x+p.w/2, cy=p.y+p.h/2; const d=Utils.dist(pk.x,pk.y,cx,cy);
+      const range=p.pickup*(1+(this.up.pick||0)*0.2+(this.up.magnet?0.7:0)) + (pk.type==='exp'?400:0);
+      if(d<range){ const sp=Math.max(60,d*6); if(d>0.1){ pk.x+=(cx-pk.x)/d*sp*dt; pk.y+=(cy-pk.y)/d*sp*dt; } }
+      if(d<18){ this.collectPickup(pk); this.pickups.splice(i,1); continue; }
+      if(pk.t>12) this.pickups.splice(i,1); }
+  }
+  collectPickup(pk){
+    const p=this.player;
+    if(pk.type==='exp'){ p.addExp(pk.val); }
+    else if(pk.type==='coin'){ this.runCoins+=pk.val; this.audio.sfx('coin'); }
+    else if(pk.type==='heal'){ p.hp=Math.min(p.maxHp,p.hp+pk.val); this.audio.sfx('pick'); }
+  }
+  autoAttack(dt){
+    const p=this.player; p.attackT-=dt;
+    if(p.attackT>0) return;
+    const W=WEAPONS[p.weaponKey]||WEAPONS.crossbow;
+    let rate=(W.rate||p.fireRate||1.2)*(1+(this.up.rate||0)*0.12);
+    p.attackT=1/rate; p.attackAnimT=0.12;
+    const cx=p.x+p.w/2, cy=p.y+p.h/2;
+    const dmg=(W.dmg||10)*(1+(this.up.dmg||0)*0.15)+(p.extraDmg||0);
+    // 重锤：范围冲击波
+    if(W.type==='shock'){
+      const r=130; this.particles.ring(cx,cy,'#CFD8DC'); this.r.shake=Math.max(this.r.shake,6); this.audio.sfx('shoot');
+      for(const m of this.monsters){ if(Utils.dist(m.x+m.w/2,m.y+m.h/2,cx,cy)<r){ this.damageMonster(m,dmg,null); this.particles.spawn(m.x+m.w/2,m.y+m.h/2,{high:6,med:3,low:1,colors:['#B0BEC5'],life:0.4,speed:30}); } }
+      return; }
+    let target=null, td=1e9;
+    const maxR=520; // 大世界索敌：怪进入射程（约半屏内）才攻击，掉落宝石可被磁吸回收，站桩也能升级
+    for(const m of this.monsters){ const d=Utils.dist(m.x+m.w/2,m.y+m.h/2,cx,cy); if(d<td && d<maxR){ td=d; target=m; } }
+    let ang = target? Math.atan2(target.y+target.h/2-cy, target.x+target.w/2-cx) : (p.dir>0?0:Math.PI);
+    const multi=1+(this.up.multi||0); const spread=0.16;
+    this.audio.sfx('shoot');
+    for(let k=0;k<multi;k++){ const a=ang+(k-(multi-1)/2)*spread;
+      const spd=(W.speed||320)*(1+(this.up.pspd||0)*0.15);
+      const opt={pierce:(W.type==='pierce'?(this.up.pierce||0):0),enemy:false,s:(W.type==='blade'?7:6),wtype:W.type,color:W.color,life:(W.type==='blade'?0.9:1.4)};
+      if(W.type==='chain') opt.chain=2;
+      this.projs.push(new Projectile(cx,cy,Math.cos(a)*spd,Math.sin(a)*spd,dmg,opt));
+      // 枪口火花
+      this.particles.spawn(cx+Math.cos(a)*18,cy+Math.sin(a)*18,{high:3,med:2,low:1,colors:[W.color,'#fff'],life:0.25,speed:20}); }
+  }
+  chainLightning(source, jumps){
+    let cur=source, dmg=source.lastChainDmg||null;
+    for(let n=0;n<jumps;n++){
+      let best=null, bd=170;
+      for(const m of this.monsters){ if(m===cur) continue; const d=Utils.dist(m.x+m.w/2,m.y+m.h/2,cur.x+cur.w/2,cur.y+cur.h/2); if(d<bd){ bd=d; best=m; } }
+      if(!best) break;
+      this.particles.bolt(cur.x+cur.w/2,cur.y+cur.h/2,best.x+best.w/2,best.y+best.h/2,'#FFE082');
+      const dd=(dmg==null)?source.lastDmg*0.7:dmg*0.7; this.damageMonster(best,dd,null);
+      this.damageMonster(best,0,null); cur=best; dmg=dd;
+    }
+  }
+  damageMonster(m,dmg,pr){
+    const p=this.player; let d=dmg;
+    const critCh=0.05+(this.up.crit||0)*0.10;
+    const crit=Math.random()<critCh; if(crit){ d*=2; this.r.shake=Math.max(this.r.shake,4); }
+    if(pr&&pr.wtype==='chain'){ m.lastChainDmg=d; }
+    m.hp-=d; m.hitFlash=0.1;
+    if(d>0) this.particles.dmg(m.x+m.w/2,m.y, Math.max(1,d), crit?'#FFD740':'#fff', crit);
+    if(m.hp<=0) this.killMonster(m);
+  }
+  killMonster(m){
+    const p=this.player;
+    const idx=this.monsters.indexOf(m); if(idx>=0) this.monsters.splice(idx,1);
+    this.kills++;
+    const cx=m.x+m.w/2, cy=m.y+m.h/2;
+    if(m.isBoss){ this.particles.spawn(cx,cy,CONFIG.PARTICLES.killBoss); this.r.shake=14; this.particles.ring(cx,cy,'#FFD740');
+      this.runCoins+=60; this.audio.sfx('coin'); this.onRegionBossKilled(m); }
+    else { this.particles.spawn(cx,cy,CONFIG.PARTICLES.killSmall); }
+    const expVal = m.isBoss?150: Math.round((2+m.scale*(3+this.time/120))*(1+(this.up.exp||0)*0.15));
+    this.pickups.push(new Pickup('exp',cx,cy,expVal));
+    if(!m.isBoss && Math.random()<0.08){ const v=Utils.rndInt(1,3); this.pickups.push(new Pickup('coin',cx,cy,v)); }
+    if(Math.random()<0.03){ this.pickups.push(new Pickup('heal',cx,cy,12)); }
+    if(this.up.lifesteal) p.hp=Math.min(p.maxHp,p.hp+2);
+    if(this.up.boom){ const r=70; this.particles.spawn(cx,cy,CONFIG.PARTICLES.explode);
+      for(const m2 of this.monsters){ if(Utils.dist(m2.x+m2.w/2,m2.y+m2.h/2,cx,cy)<r) this.damageMonster(m2,p.dmg*0.5,null); } }
+  }
+  onRegionBossKilled(m){
+    const rg=REGIONS[this.region];
+    this.toast(`✨ 击败 ${rg.bossName}！区域净化 +60 秘境币`);
+    this.bossWarn('✨ 区域已净化 ✨');
+    if(!this.cleared.includes(this.region)){ this.cleared.push(this.region); Utils.storage.set(CONFIG.STORAGE.CLEARED,this.cleared); }
+    const nextOrder=rg.order+1;
+    if(nextOrder<=5 && this.regionProgress<nextOrder){ this.regionProgress=nextOrder; Utils.storage.set(CONFIG.STORAGE.REGION_PROGRESS,this.regionProgress);
+      const next=REGION_ORDER[nextOrder]; this.toast(`新区域解锁：${REGIONS[next].name}！`); }
+    this.regionClearedInRun=true;
+  }
+  spawner(dt){
+    this.spawnT-=dt;
+    if(this.spawnT<=0){
+      // 放缓刷新节奏：间隔随时间缓慢缩短，保底 1.0s，单波至多 1~2 只，配合视野索敌保证不拥挤
+      const intv=Math.max(1.0, 2.4 - this.time/130);
+      this.spawnT=intv*Utils.rnd(0.8,1.3);
+      const n = this.time<80 ? 1 : (Math.random()<0.22?2:1);
+      for(let i=0;i<n;i++){ if(this.monsters.length>=CONFIG.MAX_MONSTERS) break; this.spawnMonster(); }
+    }
+  }
+  spawnMonster(initial){
+    const t=this.time; const rg=REGIONS[this.region];
+    const scale=rg.mult*(1 + t/90*0.28);
+    let pool=['basic','basic','basic'];
+    if(t>50) pool.push('fast','mutated');
+    if(t>110) pool.push('heavy','archer');
+    if(t>220) pool.push('mutated','fast','archer');
+    const type=Utils.pick(pool);
+    const cam=this.r.cam, vw=CONFIG.W, vh=CONFIG.H;
+    let x,y; const side=Math.floor(Math.random()*4);
+    if(side===0){ x=cam.x+Utils.rnd(-50,-14); y=cam.y+Utils.rnd(0,vh); }
+    else if(side===1){ x=cam.x+vw+Utils.rnd(14,50); y=cam.y+Utils.rnd(0,vh); }
+    else if(side===2){ x=cam.x+Utils.rnd(0,vw); y=cam.y+Utils.rnd(-50,-14); }
+    else { x=cam.x+Utils.rnd(0,vw); y=cam.y+vh+Utils.rnd(14,50); }
+    x=Utils.clamp(x,-60,CONFIG.WORLD_W+60); y=Utils.clamp(y,-60,CONFIG.WORLD_H+60);
+    const m=new Monster(type,x,y,scale,rg.color);
+    if(initial){ const p=this.player; m.x=Utils.clamp(p.x+Utils.rnd(-240,240),60,CONFIG.WORLD_W-60); m.y=Utils.clamp(p.y+Utils.rnd(-240,240),60,CONFIG.WORLD_H-60); }
+    this.monsters.push(m);
+  }
+  checkBoss(){
+    if(this.bossSpawned) return;
+    if(this.time>=CONFIG.BOSS_TIME){
+      this.bossSpawned=true;
+      const rg=REGIONS[this.region];
+      const boss=new Monster('boss',CONFIG.W/2,-80,1,rg.color);
+      boss.hp=rg.bossHp; boss.maxHp=boss.hp; boss.bossCoins=60; boss.regionName=rg.name; boss.bossName=rg.bossName;
+      boss.x=this.r.cam.x+CONFIG.W/2-36; boss.y=this.r.cam.y-90;
+      this.monsters.push(boss);
+      this.audio.sfx('boss'); this.bossWarn(`⚠ ${rg.bossName} 降临 ⚠`); this.r.shake=8;
+    }
+  }
+  checkLevelUp(){
+    const p=this.player; if(p.level>=CONFIG.MAX_LEVEL && p.exp>=p.expNeed()){
+      p.exp-=p.expNeed(); p.level++; this.transcend(); return; }
+    while(p.exp>=p.expNeed() && p.level<CONFIG.MAX_LEVEL){
+      p.exp-=p.expNeed(); p.level++; this.openUpgradeChoice(); return; }
+  }
+  transcend(){
+    const p=this.player; p.dmg*=1.5; p.hp=p.maxHp; this.particles.spawn(p.x+p.w/2,p.y+p.h/2,CONFIG.PARTICLES.levelup);
+    this.toast('✨ 超越进化！伤害提升 50%'); this.audio.sfx('levelup');
+  }
+  openUpgradeChoice(){
+    this.state='choosing';
+    const options=this.rollUpgrades(3);
+    const grid=this.$('upgrade-grid'); grid.innerHTML='';
+    options.forEach(u=>{
+      const card=document.createElement('div'); card.className='upgrade-card';
+      const name=document.createElement('div'); name.className='uc-name '+ (u.tier==='rare'?'uc-rare':(u.tier==='relic'?'uc-relic':'uc-normal'));
+      name.textContent=u.name;
+      const desc=document.createElement('div'); desc.className='uc-desc'; desc.textContent=u.desc;
+      card.appendChild(name); card.appendChild(desc);
+      card.onclick=()=>{ u.apply(this.player,this); this.audio.sfx('levelup'); this.state='playing'; this.hideAll(); this.$('hud').style.display='block'; this.renderMinimap(); };
+      grid.appendChild(card);
+    });
+    this.show('screen-upgrade'); this.$('screen-upgrade').style.zIndex=25;
+    this.$('screen-upgrade').querySelector('h2').textContent=`升级 · 三选一（等级 ${this.player.level}）`;
+  }
+  rollUpgrades(n){
+    const available=UPGRADES.filter(u=>(this.up[u.id]||0)<u.max);
+    if(available.length===0) return available.slice(0,n);
+    const result=[]; const used=new Set();
+    const tiers=Object.keys(TIER_WEIGHT); const weights=tiers.map(t=>TIER_WEIGHT[t]); const total=weights.reduce((a,b)=>a+b,0);
+    while(result.length<n && result.length<available.length){
+      let roll=Math.random()*total, tier=tiers[0];
+      for(let i=0;i<tiers.length;i++){ roll-=weights[i]; if(roll<=0){ tier=tiers[i]; break; } }
+      const cands=available.filter(u=>u.tier===tier && !used.has(u.id) && !result.includes(u));
+      if(cands.length===0){ const any=available.filter(u=>!used.has(u.id) && !result.includes(u));
+        if(any.length===0) break; const u=Utils.pick(any); used.add(u.id); result.push(u); }
+      else { const u=Utils.pick(cands); used.add(u.id); result.push(u); }
+    }
+    return result;
+  }
+  shootMonster(x,y,tx,ty,dmg){ const d=Utils.dist(x,y,tx,ty)||1; const sp=180; this.projs.push(new Projectile(x,y,(tx-x)/d*sp,(ty-y)/d*sp,dmg,{enemy:true,s:5,color:'#B948C2'})); }
+  onPlayerDeath(){
+    this.state='dead'; this.audio.stopBgm(); this.audio.stopClimate(); this.audio.sfx('hurt');
+    const survived=Math.floor(this.time);
+    const coins=this.runCoins + Math.max(1,Math.floor(survived/20));
+    this.deathCoins=coins;
+    this.showSettle(coins,survived);
+  }
+  showSettle(coins,survived){
+    const p=this.player; const rg=REGIONS[this.region];
+    this.$('settle-title').textContent = this.regionClearedInRun? `净化完成 · ${rg.name}` : (p.level>=CONFIG.MAX_LEVEL?'超越进化 · 力战而竭':'战斗结束');
+    this.$('settle-stats').innerHTML =
+      `区域 <b style="color:${rg.color}">${rg.name}</b>　存活时间 <b>${this.fmt(survived)}</b><br>等级 <b>${p.level}</b> · 击杀 <b>${this.kills}</b><br>本局秘境币 <b>+${this.runCoins}</b><br>存活奖励 <b>+${Math.max(1,Math.floor(survived/20))}</b><br>共获得 <b>+${coins} 🪙</b>${this.regionClearedInRun?'<br><b style="color:#4caf50">🎉 区域已净化，下一区域已解锁</b>':''}`;
+    this.show('screen-settle'); this.$('hud').style.display='none'; this.$('pause-btn').style.display='none';
+  }
+  settleConfirm(toMenu){
+    this.bank+=this.deathCoins; Utils.storage.set(CONFIG.STORAGE.COINS,this.bank);
+    this.deathCoins=0; this.refreshMenu(); this.refreshShop(); this.refreshHeroes(); this.refreshWeapons(); this.refreshRegions(); this.refreshPrep();
+    this.backToMenu();
+  }
+  backToMenu(){ this.mode='menu'; this.state='menu'; this.audio.stopBgm(); this.audio.stopClimate(); this.hideAll(); this.$('hud').style.display='none'; this.$('pause-btn').style.display='none'; this.hideTooltip(); this.show('screen-menu'); this.refreshMenu(); }
+  togglePause(){ if(this.mode!=='run') return; if(this.state==='playing'){ this.state='paused'; this.show('screen-pause'); } else if(this.state==='paused'){ this.resume(); } }
+  pause(){ if(this.state==='playing'){ this.state='paused'; this.show('screen-pause'); } }
+  resume(){ if(this.state==='paused'){ this.state='playing'; this.hideAll(); this.$('hud').style.display='block'; } }
+  // ---------- 渲染 ----------
+  render(){
+    const r=this.r; r.clear();
+    // 相机跟随玩家（钳制在世界范围内）
+    this.updateCamera();
+    r.cam.scale=1; r.cam.alpha=1;
+    this.renderSky();                    // 天空为屏幕固定层
+    r.camPush();
+    this.renderTiles();
+    this.renderObjects();
+    this.renderPickups();
+    this.renderMonsters();
+    this.renderProjs();
+    if(this.player) this.renderPlayer();
+    this.particles.render();             // 世界空间粒子
+    r.camPop();
+    this.particles.renderWeather();      // 天气为屏幕空间覆盖层，始终跟随视口
+    if(r.flash>0){ r.ctx.globalAlpha=Math.min(1,r.flash); r.ctx.fillStyle='#fff'; r.ctx.fillRect(0,0,r.W,r.H); r.ctx.globalAlpha=1; }
+  }
+  updateCamera(){
+    if(!this.player) return;
+    const p=this.player, W=CONFIG.W,H=CONFIG.H,WW=CONFIG.WORLD_W,WH=CONFIG.WORLD_H;
+    this.r.cam.x=Utils.clamp(p.x+p.w/2-W/2, 0, WW-W);
+    this.r.cam.y=Utils.clamp(p.y+p.h/2-H/2, 0, WH-H);
+  }
+  renderSky(){
+    const rg=REGIONS[this.region]; const c=this.r.ctx;
+    c.fillStyle=rg.sky; c.fillRect(0,0,CONFIG.W,CONFIG.H/2);
+    c.fillStyle='rgba(0,0,0,0.28)'; c.fillRect(0,0,CONFIG.W,CONFIG.H/2);
+    // 天体
+    if(rg.theme==='desert'){ c.fillStyle='#FFF3C4'; c.fillRect(CONFIG.W-150,40,44,44); }
+    else if(rg.theme==='tundra'){ c.fillStyle='#E3F2FD'; c.fillRect(120,50,30,30); }
+    else if(rg.theme==='volcano'){ c.fillStyle='#FF8A50'; c.fillRect(CONFIG.W-190,60,60,60); }
+    else if(rg.theme==='void'){ c.fillStyle='#B948C2'; c.fillRect(CONFIG.W/2-10,40,24,24); }
+    else if(rg.theme==='forest'){ c.fillStyle='#FFF9C4'; c.fillRect(90,60,40,40); }
+    else if(rg.theme==='swamp'){ c.fillStyle='#A8C4A0'; c.fillRect(160,50,34,34); }
+  }
+  renderTiles(){
+    const c=this.r.ctx; const rg=REGIONS[this.region];
+    const g=this.r.cache.get('tile_'+rg.theme)||this.r.cache.get('tile_forest');
+    const cam=this.r.cam;
+    // 只绘制可见视口内的地面瓦片（大世界性能关键）
+    const x0=Math.max(0,Math.floor(cam.x/16)*16), x1=Math.min(CONFIG.WORLD_W,cam.x+CONFIG.W+16);
+    const y0=Math.max(CONFIG.H/2,Math.floor((cam.y+CONFIG.H/2)/16)*16), y1=Math.min(CONFIG.WORLD_H,cam.y+CONFIG.H+16);
+    for(let y=y0;y<y1;y+=16)for(let x=x0;x<x1;x+=16)c.drawImage(g,x,y);
+  }
+  renderObjects(){
+    const c=this.r.ctx; const cam=this.r.cam;
+    for(const o of this.objects){ if(!o.alive) continue;
+      if(o.x+40<cam.x||o.x>cam.x+CONFIG.W+40||o.y+40<cam.y||o.y>cam.y+CONFIG.H+40) continue;
+      const meta=OBJECT_META[o.type]||{}; const box=o.getBox(); o.glow+=0.08;
+      const destructible=(o.type==='crate'||o.type==='pot'||o.type==='crystal');
+      // 可破坏物件：脉动光晕
+      if(destructible){ c.globalAlpha=0.25+0.15*Math.sin(o.glow); c.fillStyle=o.type==='crystal'?'#26C6DA':'#FFD54F';
+        c.fillRect(box.x-4,box.y-4,box.w+8,box.h+8); c.globalAlpha=1; }
+      let key='obj_'+o.type; if(o.type==='crate'&&o.hp<=1) key='obj_crate_broken';
+      const s=this.r.cache.get(key); if(s){ c.drawImage(s,o.x,o.y);
+        // 高亮描边
+        c.strokeStyle='rgba(255,255,255,0.55)'; c.lineWidth=1.5; c.strokeRect(o.x+0.5,o.y+0.5,box.w-1,box.h-1); } }
+  }
+  renderPickups(){
+    const c=this.r.ctx; const cam=this.r.cam;
+    for(const pk of this.pickups){ if(pk.x+20<cam.x||pk.x>cam.x+CONFIG.W+20||pk.y+20<cam.y||pk.y>cam.y+CONFIG.H+20) continue;
+      const bob=Math.sin(pk.t*5)*1; const glow=0.35+0.25*Math.sin(pk.t*6);
+      c.globalAlpha=glow;
+      if(pk.type==='exp'){ c.fillStyle='#FFD740'; c.beginPath(); c.arc(pk.x,pk.y,9,0,7); c.fill(); c.globalAlpha=1; c.fillStyle='#FFF8E1'; c.fillRect(pk.x-2,pk.y+bob-2,4,4); }
+      else if(pk.type==='coin'){ c.fillStyle='#FFC107'; c.beginPath(); c.arc(pk.x,pk.y,10,0,7); c.fill(); c.globalAlpha=1; c.fillStyle='#FFE082'; c.fillRect(pk.x-3,pk.y+bob-3,6,6); c.fillStyle='#FFF8E1'; c.fillRect(pk.x-1,pk.y+bob-1,2,2); }
+      else if(pk.type==='heal'){ c.fillStyle='#E53935'; c.beginPath(); c.arc(pk.x,pk.y,10,0,7); c.fill(); c.globalAlpha=1; c.fillStyle='#fff'; c.fillRect(pk.x-1,pk.y+bob-4,2,8); c.fillRect(pk.x-3,pk.y+bob,6,2); }
+    }
+  }
+  renderMonsters(){
+    const c=this.r.ctx; const rg=REGIONS[this.region]; const cam=this.r.cam;
+    for(const m of this.monsters){ if(m.x+m.w+30<cam.x||m.x>cam.x+CONFIG.W+30||m.y+m.h+30<cam.y||m.y>cam.y+CONFIG.H+30) continue;
+      const key='mon_'+m.type; let s=this.r.cache.get(key);
+      if(m.isBoss) s=this.r.cache.get('mon_boss_base');
+      if(!s) continue; c.save();
+      if(m.alpha<1) c.globalAlpha=m.alpha;
+      if(m.hitFlash>0){ c.globalAlpha*=0.6; }
+      const bob = m.isBoss? Math.sin(m.frame)*2 : Math.sin(m.frameT*10)*1;
+      c.drawImage(s, Math.floor(m.x), Math.floor(m.y+bob));
+      // BOSS 区域着色
+      if(m.isBoss){ c.globalAlpha=0.35; c.fillStyle=rg.color; c.fillRect(m.x,m.y,m.w,m.h); c.globalAlpha=1; }
+      // 减速/灼烧标记
+      if(m.slow>0){ c.fillStyle='rgba(110,198,255,0.4)'; c.fillRect(m.x,m.y,4,4); }
+      if(m.burn>0){ c.fillStyle='rgba(255,112,67,0.5)'; c.fillRect(m.x+6,m.y,4,4); }
+      if(m.isBoss){ c.fillStyle='#000'; c.globalAlpha=0.5; c.fillRect(m.x+4,m.y+m.h-2,m.w-8,4);
+        c.fillStyle='#FF5252'; c.globalAlpha=1; c.fillRect(m.x+4,m.y+m.h-2,(m.w-8)*Utils.clamp(m.hp/m.maxHp,0,1),4);
+        c.fillStyle='#fff'; c.font='12px "Courier New",monospace'; c.textAlign='center'; c.fillText(m.bossName||rg.bossName, m.x+m.w/2, m.y-8); c.textAlign='left'; }
+      else if(m.type==='heavy'){ c.fillStyle='#000'; c.globalAlpha=0.5; c.fillRect(m.x+4,m.y+m.h-2,m.w-8,3);
+        c.fillStyle='#4CAF50'; c.globalAlpha=1; c.fillRect(m.x+4,m.y+m.h-2,(m.w-8)*Utils.clamp(m.hp/m.maxHp,0,1),3); }
+      c.restore(); } }
+  renderProjs(){
+    const c=this.r.ctx; const cam=this.r.cam;
+    for(const pr of this.projs){ if(pr.x+20<cam.x||pr.x>cam.x+CONFIG.W+20||pr.y+20<cam.y||pr.y>cam.y+CONFIG.H+20) continue;
+      // 拖尾
+      for(let i=0;i<pr.trail.length-1;i++){ const t=pr.trail[i]; const a=(1-i/pr.trail.length)*0.35; c.globalAlpha=a; c.fillStyle=pr.color; c.fillRect(Math.floor(t.x-pr.s/2),Math.floor(t.y-pr.s/2),pr.s,pr.s); }
+      c.globalAlpha=1;
+      c.fillStyle=pr.color;
+      if(pr.wtype==='blade'){ c.save(); c.translate(pr.x,pr.y); c.rotate(pr.life*14); c.fillRect(-pr.s,-2,pr.s*2,4); c.fillRect(-2,-pr.s,4,pr.s*2); c.restore(); }
+      else if(pr.wtype==='ice'){ c.fillStyle='#E1F5FE'; c.fillRect(pr.x-3,pr.y-1,6,2); c.fillRect(pr.x-1,pr.y-3,2,6); c.fillStyle=pr.color; c.fillRect(pr.x-2,pr.y-2,4,4); }
+      else if(pr.wtype==='chain'){ c.fillStyle='#FFF59D'; c.fillRect(pr.x-2,pr.y-3,4,6); c.fillStyle=pr.color; c.fillRect(pr.x-1,pr.y-1,2,2); }
+      else { c.fillRect(Math.floor(pr.x-pr.s/2),Math.floor(pr.y-pr.s/2),pr.s,pr.s); }
+    }
+  }
+  renderPlayer(){
+    const p=this.player; if(!p.alive) return; const r=this.r;
+    const heroKey=HEROES[p.heroId].sprite;
+    const key=`${heroKey}_${p.state==='walk'?('walk'+(p.frame+1)):(p.state==='attack'?'attack':'idle')}`;
+    let s=r.cache.get(key); if(!s) s=r.cache.get(heroKey+'_idle');
+    const c=r.ctx; c.save();
+    if(p.invincible>0 && Math.floor(p.invincible*12)%2===0) c.globalAlpha=0.45;
+    c.translate(Math.floor(p.x),Math.floor(p.y));
+    if(p.dir<0){ c.translate(p.w,0); c.scale(-1,1); }
+    c.drawImage(s,0,0);
+    // 武器图标（手部）
+    const W=WEAPONS[p.weaponKey]; if(W&&W.icon){ const wi=r.cache.get(W.icon); if(wi) c.drawImage(wi, p.w-8, 8, 22,22); }
+    c.restore();
+    // 攻击轨迹（冲击波武器）
+    if(W&&W.type==='shock'&&p.attackAnimT>0){ c.strokeStyle='rgba(207,216,220,'+(p.attackAnimT*4)+')'; c.lineWidth=5; c.beginPath(); c.arc(p.x+p.w/2,p.y+p.h/2,120*(1-p.attackAnimT*6),0,7); c.stroke(); }
+  }
+  // ---------- 画布点击：查看/交互 ----------
+  canvasToWorld(e){
+    const rect=this.canvas.getBoundingClientRect();
+    const px=e.clientX-rect.left, py=e.clientY-rect.top;
+    const x=Utils.clamp(px/rect.width*CONFIG.W,0,CONFIG.W)+this.r.cam.x;
+    const y=Utils.clamp(py/rect.height*CONFIG.H,0,CONFIG.H)+this.r.cam.y;
+    return {x,y,px,py};
+  }
+  onCanvasClick(e){ if(this.mode!=='run'||this.state!=='playing') return; const w=this.canvasToWorld(e); this.inspectAt(w.x,w.y); }
+  onCanvasTap(t){ if(this.mode!=='run'||this.state!=='playing') return; const w=this.canvasToWorld(t); this.inspectAt(w.x,w.y); }
+  inspectAt(x,y){
+    const p=this.player; const cx=p.x+p.w/2, cy=p.y+p.h/2;
+    // 1) 拾取物：点击自动拾取
+    for(const pk of this.pickups){ if(Utils.dist(pk.x,pk.y,x,y)<26){ this.collectPickup(pk);
+      const nm={exp:'经验宝石',coin:'秘境币',heal:'治疗药水'}[pk.type]; const ds={exp:`拾取 +${pk.val} 经验`,coin:`拾取 +${pk.val} 金币`,heal:`拾取 +${pk.val} 生命`}[pk.type];
+      this.showTooltip(nm,'拾取物',ds,{x:pk.x,y:pk.y}); this.pickups.splice(this.pickups.indexOf(pk),1); return; } }
+    // 2) 场景物件：查看属性 / 破坏
+    for(const o of this.objects){ if(!o.alive) continue; const box=o.getBox();
+      if(x>=box.x-6 && x<=box.x+box.w+6 && y>=box.y-6 && y<=box.y+box.h+6){
+        const meta=OBJECT_META[o.type]||{};
+        if(o.type==='crate'||o.type==='pot'||o.type==='crystal'){ this.breakObject(o,true); return; }
+        this.showTooltip(meta.name,meta.kind,meta.desc,{x:box.x+box.w/2,y:box.y}); return; } }
+    // 3) 空白处：显示当前位置
+    this.showTooltip('当前坐标',`${REGIONS[this.region].name} · 局部位置`,`X ${Math.floor(x)} · Y ${Math.floor(y)} · 长按/点击可查看物品`,{x,y});
+  }
+  showTooltip(name,kind,desc,worldPos){
+    const el=this.$('tooltip');
+    el.querySelector('.tt-name').textContent=name;
+    el.querySelector('.tt-kind').textContent=kind;
+    el.querySelector('.tt-desc').textContent=desc;
+    // 世界坐标 → 屏幕位置（贴附在物件上方）
+    const rect=this.canvas.getBoundingClientRect();
+    const sx=(worldPos.x-this.r.cam.x)/CONFIG.W*rect.width, sy=(worldPos.y-this.r.cam.y)/CONFIG.H*rect.height;
+    const cx=rect.left+sx, cy=rect.top+sy-30;
+    el.style.left=Math.max(8,Math.min(window.innerWidth-200,cx-90))+'px';
+    el.style.top=Math.max(8,cy)+'px';
+    el.style.display='block';
+    clearTimeout(this.tooltipTimer); this.tooltipTimer=setTimeout(()=>this.hideTooltip(),2200);
+  }
+  hideTooltip(){ this.$('tooltip').style.display='none'; }
+  // ---------- 小地图（世界全图 + 实时局部定位 + 节流重绘） ----------
+  renderMinimap(){
+    if(this.mode!=='run') return;
+    const now=performance.now();
+    if(!this._mmT){ this._mmT=0; }
+    // 每 0.18s 重绘一次，显著降低主线程负担（鼠标卡顿根因之一）
+    if(now-this._mmT<180) return;
+    this._mmT=now;
+    const cv=this.$('minimap'); const c=cv.getContext('2d'); const MW=214,MH=134;
+    const rg=REGIONS[this.region];
+    c.fillStyle='rgba(6,10,18,0.82)'; c.fillRect(0,0,MW,MH);
+    c.fillStyle=rg.color; c.globalAlpha=0.25; c.fillRect(2,2,MW-4,MH-4); c.globalAlpha=1;
+    const kx=MW/CONFIG.WORLD_W, ky=MH/CONFIG.WORLD_H;
+    // 物件
+    c.fillStyle='#9aa'; for(const o of this.objects){ if(!o.alive) continue; c.fillRect(o.x*kx,o.y*ky,3,3); }
+    // 拾取物
+    c.fillStyle='#FFD740'; for(const pk of this.pickups){ c.fillRect(pk.x*kx,pk.y*ky,2,2); }
+    // 怪物
+    c.fillStyle='#ff5252'; for(const m of this.monsters){ c.fillRect(m.x*kx,m.y*ky,m.isBoss?5:2,m.isBoss?5:2); }
+    // 玩家
+    const p=this.player; const px=p.x*kx+p.w/2*kx, py=p.y*ky+p.h/2*ky;
+    c.fillStyle='#fff'; c.fillRect(px-3,py-3,6,6); c.fillStyle='#FFD740'; c.fillRect(px-1,py-1,2,2);
+    // 当前视口框（便于在大地图中定位自己）
+    c.strokeStyle='rgba(255,255,255,0.65)'; c.lineWidth=1; c.strokeRect(this.r.cam.x*kx,this.r.cam.y*ky,CONFIG.W*kx,CONFIG.H*ky);
+    c.strokeStyle='rgba(255,255,255,0.5)'; c.lineWidth=1; c.strokeRect(1,1,MW-2,MH-2);
+    // 局部坐标刻度
+    c.fillStyle='#668'; c.font='9px "Courier New",monospace';
+    c.fillText(`${Math.floor(p.x)},${Math.floor(p.y)}`, 4, MH-4);
+    // 区域气候标签
+    this.$('minimap-label').innerHTML = `📍 ${rg.name}　${rg.temp>0?'+':''}${rg.temp}°C　湿度${rg.humid}%　${this.weatherName(rg.weather)}`;
+  }
+  // ---------- HUD ----------
+  fmt(s){ const m=Math.floor(s/60), sec=Math.floor(s%60); return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`; }
+  updateHUD(){
+    const p=this.player; this.$('hp-fill').style.width=(p.hp/p.maxHp*100)+'%';
+    this.$('hud-level').textContent=p.level>=CONFIG.MAX_LEVEL?`${CONFIG.MAX_LEVEL}+`:`${p.level}`;
+    this.$('hud-time').textContent=this.fmt(this.time);
+    this.$('hud-coins').textContent=this.runCoins;
+    const W=WEAPONS[p.weaponKey]; this.$('hud-weapon').textContent=W?W.name:'—';
+    this.$('exp-fill').style.width=(p.exp/p.expNeed()*100)+'%';
+  }
+  toast(msg){ const el=this.$('toast'); el.textContent=msg; el.style.opacity=1; setTimeout(()=>{ el.style.opacity=0; },1800); }
+  bossWarn(msg){ const el=this.$('boss-warn'); el.textContent=msg; el.style.opacity=1; setTimeout(()=>{ el.style.opacity=0; },2400); }
+}
+
+// ============================================================
+// 启动
+// ============================================================
+window.addEventListener('DOMContentLoaded',()=>{
+  const game=new Game(); window.__game=game; // 调试钩子：便于外部实时读取游戏状态
+  const watched=Utils.storage.get(CONFIG.STORAGE.WATCHED,false) || /[?&]intro=0/.test(location.search) || /[?&]lvlup=1/.test(location.search);
+  if(!watched){ setTimeout(()=>game.playStory(),300); }
+  const unlock=()=>{ document.removeEventListener('click',unlock); document.removeEventListener('touchstart',unlock); };
+  document.addEventListener('click',unlock); document.addEventListener('touchstart',unlock);
+});
+</script>
+</body>
+</html>
