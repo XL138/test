@@ -17,8 +17,23 @@
   #game-container { position:relative; aspect-ratio:16/9; width:min(100vw, calc(100vh * 16 / 9)); height:min(100vh, calc(100vw * 9 / 16)); overflow:hidden; transform-origin:center center; }
   #game-canvas { width:100%; height:100%; image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
 
-  /* 保留旋转提示 DOM 但默认隐藏：不再强制提醒用户横屏 */
-  #rotate-tip { display:none !important; }
+  /* 横屏引导动画：零环境检测，固定3秒自动消失，适配所有浏览器 */
+  #rotate-anim { position:fixed; top:0; left:0; width:100%; height:100%; background:#0d0d1a; z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; transition:opacity .5s ease; }
+  #rotate-anim.hide { opacity:0; pointer-events:none; }
+  #rotate-anim .phone { width:68px; height:116px; border:4px solid #e8e8e8; border-radius:12px; position:relative; animation:phoneRotate 1.6s ease-in-out infinite; background:#1a1a2e; }
+  #rotate-anim .phone::before { content:''; position:absolute; top:7px; left:50%; transform:translateX(-50%); width:22px; height:4px; background:#555; border-radius:2px; }
+  #rotate-anim .phone .scr { position:absolute; top:17px; left:5px; right:5px; bottom:9px; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(4,1fr); gap:3px; padding:3px; }
+  #rotate-anim .phone .scr i { border-radius:2px; opacity:.85; }
+  #rotate-anim .phone .scr i:nth-child(1){background:#4CAF50} #rotate-anim .phone .scr i:nth-child(2){background:#2196F3} #rotate-anim .phone .scr i:nth-child(3){background:#FF9800}
+  #rotate-anim .phone .scr i:nth-child(4){background:#E91E63} #rotate-anim .phone .scr i:nth-child(5){background:#9C27B0} #rotate-anim .phone .scr i:nth-child(6){background:#00BCD4}
+  #rotate-anim .phone .scr i:nth-child(7){background:#FFEB3B} #rotate-anim .phone .scr i:nth-child(8){background:#8BC34A} #rotate-anim .phone .scr i:nth-child(9){background:#FF5722}
+  #rotate-anim .phone .scr i:nth-child(10){background:#607D8B} #rotate-anim .phone .scr i:nth-child(11){background:#795548} #rotate-anim .phone .scr i:nth-child(12){background:#3F51B5}
+  #rotate-anim .title { color:#fff; font-size:24px; font-weight:bold; letter-spacing:4px; margin-top:12px; text-shadow:0 0 12px rgba(255,215,64,.4); }
+  #rotate-anim .sub { color:#8899aa; font-size:13px; letter-spacing:2px; }
+  #rotate-anim .progress { position:absolute; bottom:36px; left:50%; transform:translateX(-50%); width:160px; height:3px; background:rgba(255,255,255,.12); border-radius:2px; overflow:hidden; }
+  #rotate-anim .progress .bar { height:100%; width:0%; background:#FFD740; border-radius:2px; animation:progressFill 3s linear forwards; box-shadow:0 0 8px #FFD740; }
+  @keyframes phoneRotate { 0%,25% { transform:rotate(0deg); } 55%,100% { transform:rotate(-90deg); } }
+  @keyframes progressFill { from { width:0%; } to { width:100%; } }
 
   .ui-layer { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
   .ui-layer > * { pointer-events:auto; }
@@ -131,7 +146,12 @@
 </head>
 <body>
   
-  <div id="rotate-tip"><div class="ico">📱</div><div>请旋转设备至横屏</div><div style="font-size:14px;color:#889">横屏后自动进入游戏</div></div>
+  <div id="rotate-anim">
+    <div class="phone"><div class="scr"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="title">请横屏游玩</div>
+    <div class="sub">旋转手机获得最佳游戏体验</div>
+    <div class="progress"><div class="bar"></div></div>
+  </div>
 
   <div id="game-root">
     <div id="game-container">
@@ -397,22 +417,6 @@ class Renderer {
   sprite(key,w,h,draw){ if(this.cache.has(key)) return this.cache.get(key);
     const o=document.createElement('canvas'); o.width=w; o.height=h; const c=o.getContext('2d');
     c.imageSmoothingEnabled=false; draw(c); this.cache.set(key,o); return o; }
-}
-
-// ============================================================
-// 强制横屏适配（进入即横屏展示，不再提示用户旋转）
-// ============================================================
-class ScreenManager {
-  constructor(){ this.rotated=false; this.onChange=null;
-    this.update(); window.addEventListener('resize',()=>this.update());
-    window.addEventListener('orientationchange',()=>this.update()); }
-  update(){
-    // 不做旋转、不做提示：页面始终按 16:9 等比居中展示，用户自行横持手机
-    this.rotated=false;
-    document.getElementById('rotate-tip').style.display='none';
-    if(this.onChange) this.onChange(false);
-  }
-  map(x,y){ return {x,y}; }
 }
 
 // ============================================================
@@ -1013,7 +1017,7 @@ class StoryPlayer {
 // 输入系统（PC 键盘 + 移动端摇杆，支持旋转映射）
 // ============================================================
 class InputManager {
-  constructor(screen){ this.screen=screen; this.keys={up:false,down:false,left:false,right:false};
+  constructor(){ this.keys={up:false,down:false,left:false,right:false};
     this.joystick={active:false,dx:0,dy:0};
     window.addEventListener('keydown',e=>{ const k=e.key.toLowerCase();
       if(k==='w'||k==='arrowup')this.keys.up=true; if(k==='s'||k==='arrowdown')this.keys.down=true;
@@ -1028,7 +1032,7 @@ class InputManager {
   initJoystick(){ const el=document.getElementById('joystick'), thumb=document.getElementById('joystick-thumb'); el.style.display='block';
     let cx=0,cy=0; const R=40;
     el.addEventListener('touchstart',e=>{ e.preventDefault(); const rc=el.getBoundingClientRect(); cx=rc.left+rc.width/2; cy=rc.top+rc.height/2; this.joystick.active=true; },{passive:false});
-    el.addEventListener('touchmove',e=>{ e.preventDefault(); if(!this.joystick.active)return; const t=e.touches[0]; const pos=this.screen.map(t.clientX,t.clientY);
+    el.addEventListener('touchmove',e=>{ e.preventDefault(); if(!this.joystick.active)return; const t=e.touches[0]; const pos={x:t.clientX,y:t.clientY};
       let dx=pos.x-cx, dy=pos.y-cy; const d=Math.sqrt(dx*dx+dy*dy); if(d>R){ dx=dx/d*R; dy=dy/d*R; }
       thumb.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
       this.joystick.dx=dx/R; this.joystick.dy=dy/R; },{passive:false});
@@ -1046,10 +1050,9 @@ class Game {
     Game.instance=this;
     this.canvas=document.getElementById('game-canvas');
     this.r=new Renderer(this.canvas);
-    this.screen=new ScreenManager();
     this.sprites=new SpriteFactory(this.r);
     this.audio=new AudioManager();
-    this.input=new InputManager(this.screen);
+    this.input=new InputManager();
     this.quality=Utils.storage.get(CONFIG.STORAGE.QUALITY,'HIGH');
     this.particles=new ParticleSystem(this.r,this.quality);
     this.bank=Utils.storage.get(CONFIG.STORAGE.COINS,0);
@@ -1759,6 +1762,9 @@ class Game {
 // ============================================================
 window.addEventListener('DOMContentLoaded',()=>{
   const game=new Game(); window.__game=game; // 调试钩子：便于外部实时读取游戏状态
+  // 横屏引导动画：零环境检测，固定3秒自动淡出，所有浏览器一致
+  const rotAnim=document.getElementById('rotate-anim');
+  if(rotAnim){ setTimeout(()=>{ rotAnim.classList.add('hide'); setTimeout(()=>{ rotAnim.style.display='none'; },520); },3000); }
   const watched=Utils.storage.get(CONFIG.STORAGE.WATCHED,false) || /[?&]intro=0/.test(location.search) || /[?&]lvlup=1/.test(location.search);
   if(!watched){ setTimeout(()=>game.playStory(),300); }
   const unlock=()=>{ document.removeEventListener('click',unlock); document.removeEventListener('touchstart',unlock); };
