@@ -65,8 +65,13 @@
 
   /* 剧情 */
   #skip-btn { position:absolute; right:22px; bottom:22px; padding:10px 22px; background:rgba(0,0,0,.6); border:2px solid #fff; color:#fff; font-size:16px; cursor:pointer; display:none; min-width:48px; min-height:48px; }
-  #subtitle-layer { position:absolute; bottom:96px; left:50%; transform:translateX(-50%); max-width:78%; padding:10px 22px; background:rgba(0,0,0,.75); color:#fff; font-size:21px; text-align:center; line-height:1.7; display:none; letter-spacing:1px; border-left:3px solid #FFD740; }
+  #subtitle-layer { position:absolute; bottom:88px; left:50%; transform:translateX(-50%); max-width:80%; max-height:34%; overflow:hidden; padding:10px 22px; background:rgba(0,0,0,.75); color:#fff; font-size:20px; text-align:center; line-height:1.7; display:none; letter-spacing:1px; border-left:3px solid #FFD740; }
   #story-next-btn { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); padding:12px 30px; background:rgba(255,215,64,.18); border:2px solid #FFD740; color:#FFD740; font-size:17px; cursor:pointer; display:none; letter-spacing:3px; animation:npulse 1.1s infinite; }
+  @media (max-height:520px) and (orientation:landscape){
+    #subtitle-layer { bottom:74px; font-size:16px; padding:8px 14px; line-height:1.5; }
+    #story-next-btn { bottom:18px; padding:8px 18px; font-size:14px; }
+    #skip-btn { right:14px; bottom:18px; padding:8px 16px; font-size:14px; min-width:40px; min-height:40px; }
+  }
   @keyframes npulse { 0%,100%{ box-shadow:0 0 6px rgba(255,215,64,.4);} 50%{ box-shadow:0 0 22px rgba(255,215,64,.9);} }
 
   /* 摇杆 */
@@ -75,8 +80,11 @@
   #pause-btn { position:absolute; right:20px; bottom:20px; width:56px; height:56px; background:rgba(0,0,0,.5); border:2px solid #fff; color:#fff; font-size:24px; cursor:pointer; display:none; }
 
   /* 全屏界面层 */
-  .screen { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; background:rgba(8,10,18,.94); color:#fff; z-index:20; }
+  .screen { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:flex-start; overflow-y:auto; overflow-x:hidden; background:rgba(8,10,18,.94); color:#fff; z-index:20; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; scrollbar-width:thin; }
   .screen.show { display:flex; }
+  /* 内容居中 + 超高时仍可滚动：用前后 margin:auto 占位实现安全居中 */
+  .screen::before, .screen::after { content:''; margin:auto; flex-shrink:0; }
+  .screen > * { flex-shrink:0; }
   .screen h1 { font-size:34px; letter-spacing:4px; margin-bottom:8px; color:#FFD740; text-shadow:0 0 12px rgba(255,215,64,.5); }
   .screen h2 { font-size:22px; letter-spacing:2px; margin-bottom:14px; color:#fff; }
   .screen .sub { color:#9aa; font-size:14px; margin-bottom:18px; }
@@ -122,17 +130,22 @@
 
   /* 完整地图弹层 */
   #screen-fullmap { z-index:26; }
-  #fullmap-canvas { width:920px; height:560px; background:rgba(6,8,16,.9); border:2px solid rgba(255,255,255,.35); image-rendering:pixelated; cursor:pointer; }
-  #fullmap-info { position:absolute; left:50%; top:70%; transform:translateX(-50%); width:640px; min-height:78px; padding:10px 16px; background:rgba(0,0,0,.85); border:2px solid #FFD740; text-align:center; font-size:14px; line-height:1.7; color:#fff; pointer-events:none; }
+  #fullmap-canvas { width:min(920px,96%); height:auto; aspect-ratio:920/560; background:rgba(6,8,16,.9); border:2px solid rgba(255,255,255,.35); image-rendering:pixelated; cursor:pointer; }
+  #fullmap-info { position:static; margin:10px auto 4px; width:min(640px,94%); min-height:0; padding:10px 16px; background:rgba(0,0,0,.85); border:2px solid #FFD740; text-align:center; font-size:14px; line-height:1.7; color:#fff; pointer-events:none; }
   #fullmap-info b { color:#FFD740; }
 
   /* 出战准备 */
-  .prep-row { display:flex; align-items:center; gap:14px; width:640px; justify-content:space-between; margin:8px 0; font-size:15px; }
+  .prep-row { display:flex; align-items:center; gap:14px; width:min(640px,92%); justify-content:flex-start; flex-wrap:wrap; margin:8px 0; font-size:15px; }
   .prep-row .lbl { color:#9aa; min-width:60px; }
-  .prep-tags { display:flex; gap:8px; flex-wrap:wrap; }
+  .prep-tags { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
   .prep-tags button { min-width:90px; min-height:42px; background:rgba(255,255,255,.07); border:2px solid #555; color:#ccc; cursor:pointer; font-family:inherit; font-size:13px; }
   .prep-tags button.on { border-color:#FFD740; color:#FFD740; background:rgba(255,215,64,.12); }
   .prep-tags button.locked { opacity:.4; cursor:not-allowed; }
+  #prep-region-info { max-width:min(720px,92%) !important; font-size:14px; }
+  @media (max-width:860px){
+    .prep-row { width:94%; gap:8px; }
+    .prep-tags button { min-width:74px; min-height:38px; font-size:12px; }
+  }
 
   .settle-stats { font-size:15px; line-height:2; color:#ddd; text-align:center; }
   .settle-stats b { color:#FFD740; font-size:20px; }
@@ -1031,12 +1044,18 @@ class InputManager {
     window.addEventListener('blur',()=>{ this.keys.up=this.keys.down=this.keys.left=this.keys.right=false; if(Game.instance&&Game.instance.state==='playing') Game.instance.pause(); });
     if(Utils.isMobile()) this.initJoystick();
   }
-  initJoystick(){ const el=document.getElementById('joystick'), thumb=document.getElementById('joystick-thumb'); el.style.display='block';
+  initJoystick(){ const el=document.getElementById('joystick'), thumb=document.getElementById('joystick-thumb');
     let cx=0,cy=0; const R=40;
+    this.joystickEl=el; this.joystickThumb=thumb;
+    // 默认隐藏，由游戏流程（剧情/菜单隐藏，运行显示）控制
+    el.style.display='none';
     el.addEventListener('touchstart',e=>{ e.preventDefault(); const rc=el.getBoundingClientRect(); cx=rc.left+rc.width/2; cy=rc.top+rc.height/2; this.joystick.active=true; },{passive:false});
     el.addEventListener('touchmove',e=>{ e.preventDefault(); if(!this.joystick.active)return; const t=e.touches[0]; const pos={x:t.clientX,y:t.clientY};
       let dx=pos.x-cx, dy=pos.y-cy; const d=Math.sqrt(dx*dx+dy*dy); if(d>R){ dx=dx/d*R; dy=dy/d*R; }
-      thumb.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      // thumb 显示方向也应用旋转映射，与角色实际移动方向保持一致（避免视觉错位）
+      let tdx=dx, tdy=dy;
+      if(this.rotated){ const tmp=tdx; tdx=tdy; tdy=-tmp; }
+      thumb.style.transform=`translate(calc(-50% + ${tdx}px), calc(-50% + ${tdy}px))`;
       this.joystick.dx=dx/R; this.joystick.dy=dy/R; },{passive:false});
     const end=e=>{ e.preventDefault(); this.joystick.active=false; this.joystick.dx=0; this.joystick.dy=0; thumb.style.transform='translate(-50%,-50%)'; };
     el.addEventListener('touchend',end,{passive:false}); el.addEventListener('touchcancel',end,{passive:false}); }
@@ -1047,6 +1066,8 @@ class InputManager {
     return { left:dx<-0.2, right:dx>0.2, up:dy<-0.2, down:dy>0.2 };
   }
     return this.keys; }
+  setVisible(v){ if(this.joystickEl) this.joystickEl.style.display=v?'block':'none'; }
+  resetJoystick(){ if(this.joystick){ this.joystick.active=false; this.joystick.dx=0; this.joystick.dy=0; if(this.joystickThumb) this.joystickThumb.style.transform='translate(-50%,-50%)'; } }
 }
 
 // ============================================================
@@ -1089,7 +1110,7 @@ class Game {
     this.$('btn-weapons-back').onclick=()=>{ this.audio.sfx('click'); this.show('screen-menu'); };
     this.$('btn-regions').onclick=()=>{ this.audio.sfx('click'); this.show('screen-regions'); this.refreshRegions(); };
     this.$('btn-regions-back').onclick=()=>{ this.audio.sfx('click'); this.show('screen-menu'); };
-    this.$('btn-fullmap-close').onclick=()=>{ this.audio.sfx('click'); this.hideAll(); if(this.mode==='run'){ this.$('hud').style.display='block'; this.state='playing'; } else this.show('screen-menu'); };
+    this.$('btn-fullmap-close').onclick=()=>{ this.audio.sfx('click'); this.hideAll(); if(this.mode==='run'){ this.$('hud').style.display='block'; this.state='playing'; if(this.input) this.input.setVisible(Utils.isMobile()); } else this.show('screen-menu'); };
     this.$('btn-shop').onclick=()=>{ this.audio.sfx('click'); this.show('screen-shop'); this.refreshShop(); };
     this.$('btn-shop-back').onclick=()=>{ this.audio.sfx('click'); this.show('screen-menu'); };
     this.$('btn-story').onclick=()=>{ this.audio.sfx('click'); this.playStory(); };
@@ -1213,6 +1234,7 @@ class Game {
   }
   // ---------- 完整地图 ----------
   openFullMap(){ if(this.mode==='run'){ this.state='paused'; this.hideAll(); this.$('hud').style.display='none'; this.$('pause-btn').style.display='none'; } else this.hideAll();
+    if(this.input) this.input.setVisible(false); // 打开全图时隐藏摇杆
     this.show('screen-fullmap'); this.renderFullMap(); this.audio.sfx('click'); }
   renderFullMap(){
     const c=this.$('fullmap-canvas').getContext('2d'); c.imageSmoothingEnabled=false;
@@ -1257,13 +1279,14 @@ class Game {
   playStory(){
     const watched=Utils.storage.get(CONFIG.STORAGE.WATCHED,false);
     this.mode='story'; this.state='story'; this.hideAll(); this.$('hud').style.display='none'; this.$('pause-btn').style.display='none'; this.audio.stopClimate();
+    if(this.input) this.input.setVisible(false); // 剧情插播时隐藏摇杆，避免遮挡
     // 首次观看不显示跳过按钮；后续重看显示
     this.story=new StoryPlayer(this.r,this.audio,()=>{ this.state='menu'; this.mode='menu'; this.hideAll(); this.show('screen-menu'); this.refreshMenu(); }, watched);
     this.story.start();
   }
   startRun(heroId,weaponKey,regionKey){
     this.mode='run'; this.state='playing'; this.region=regionKey; this.regionClearedInRun=false; this.bossSpawned=false;
-    this.hideAll(); this.$('hud').style.display='block'; if(Utils.isMobile()) this.$('pause-btn').style.display='block';
+    this.hideAll(); this.$('hud').style.display='block'; if(Utils.isMobile()) this.$('pause-btn').style.display='block'; if(this.input) this.input.setVisible(Utils.isMobile());
     this.audio.bgm('game'); this.audio.playClimate(regionKey);
     this.player=new Player(heroId,weaponKey);
     const pu=this.purchases; this.player.maxHp+= (pu.maxhp||0)*10; this.player.hp=this.player.maxHp;
@@ -1514,10 +1537,11 @@ class Game {
       name.textContent=u.name;
       const desc=document.createElement('div'); desc.className='uc-desc'; desc.textContent=u.desc;
       card.appendChild(name); card.appendChild(desc);
-      card.onclick=()=>{ u.apply(this.player,this); this.audio.sfx('levelup'); this.state='playing'; this.hideAll(); this.$('hud').style.display='block'; this.renderMinimap(); };
+      card.onclick=()=>{ u.apply(this.player,this); this.audio.sfx('levelup'); this.state='playing'; this.hideAll(); this.$('hud').style.display='block'; this.renderMinimap(); if(this.input){ this.input.setVisible(Utils.isMobile()); this.input.resetJoystick(); } };
       grid.appendChild(card);
     });
     this.show('screen-upgrade'); this.$('screen-upgrade').style.zIndex=25;
+    if(this.input) this.input.setVisible(false); // 升级选择时隐藏摇杆
     this.$('screen-upgrade').querySelector('h2').textContent=`升级 · 三选一（等级 ${this.player.level}）`;
   }
   rollUpgrades(n){
@@ -1548,17 +1572,17 @@ class Game {
     this.$('settle-title').textContent = this.regionClearedInRun? `净化完成 · ${rg.name}` : (p.level>=CONFIG.MAX_LEVEL?'超越进化 · 力战而竭':'战斗结束');
     this.$('settle-stats').innerHTML =
       `区域 <b style="color:${rg.color}">${rg.name}</b>　存活时间 <b>${this.fmt(survived)}</b><br>等级 <b>${p.level}</b> · 击杀 <b>${this.kills}</b><br>本局秘境币 <b>+${this.runCoins}</b><br>存活奖励 <b>+${Math.max(1,Math.floor(survived/20))}</b><br>共获得 <b>+${coins} 🪙</b>${this.regionClearedInRun?'<br><b style="color:#4caf50">🎉 区域已净化，下一区域已解锁</b>':''}`;
-    this.show('screen-settle'); this.$('hud').style.display='none'; this.$('pause-btn').style.display='none';
+    this.show('screen-settle'); this.$('hud').style.display='none'; this.$('pause-btn').style.display='none'; if(this.input) this.input.setVisible(false);
   }
   settleConfirm(toMenu){
     this.bank+=this.deathCoins; Utils.storage.set(CONFIG.STORAGE.COINS,this.bank);
     this.deathCoins=0; this.refreshMenu(); this.refreshShop(); this.refreshHeroes(); this.refreshWeapons(); this.refreshRegions(); this.refreshPrep();
     this.backToMenu();
   }
-  backToMenu(){ this.mode='menu'; this.state='menu'; this.audio.stopBgm(); this.audio.stopClimate(); this.hideAll(); this.$('hud').style.display='none'; this.$('pause-btn').style.display='none'; this.hideTooltip(); this.show('screen-menu'); this.refreshMenu(); }
-  togglePause(){ if(this.mode!=='run') return; if(this.state==='playing'){ this.state='paused'; this.show('screen-pause'); } else if(this.state==='paused'){ this.resume(); } }
-  pause(){ if(this.state==='playing'){ this.state='paused'; this.show('screen-pause'); } }
-  resume(){ if(this.state==='paused'){ this.state='playing'; this.hideAll(); this.$('hud').style.display='block'; } }
+  backToMenu(){ this.mode='menu'; this.state='menu'; this.audio.stopBgm(); this.audio.stopClimate(); this.hideAll(); this.$('hud').style.display='none'; this.$('pause-btn').style.display='none'; this.hideTooltip(); if(this.input) this.input.setVisible(false); this.show('screen-menu'); this.refreshMenu(); }
+  togglePause(){ if(this.mode!=='run') return; if(this.state==='playing'){ this.state='paused'; this.show('screen-pause'); if(this.input) this.input.setVisible(false); } else if(this.state==='paused'){ this.resume(); } }
+  pause(){ if(this.state==='playing'){ this.state='paused'; this.show('screen-pause'); if(this.input) this.input.setVisible(false); } }
+  resume(){ if(this.state==='paused'){ this.state='playing'; this.hideAll(); this.$('hud').style.display='block'; if(this.input) this.input.setVisible(Utils.isMobile()); } }
   // ---------- 渲染 ----------
   render(){
     const r=this.r; r.clear();
